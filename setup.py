@@ -12,5 +12,5 @@ setup(name='chronos',
       packages=find_packages(exclude=["tests"]),
 #      scripts=['bin/dopfit','bin/dopjointfit','bin/doppler'],
       requires=['numpy','astropy(>=4.0)','scipy','dlnpyutils'],
-#      include_package_data=True,
+      include_package_data=True,
 )
