@@ -15,6 +15,7 @@ from astropy.wcs import WCS
 from astropy.io import fits
 from astropy.table import Table
 from scipy.spatial import cKDTree
+from .isogrid import IsoGrid
 
 def datadir():
     """ Return the data directory name."""
@@ -33,10 +34,16 @@ def loadiso():
     iso = []
     for f in files:
         iso.append(Table.read(f))
+    if len(iso)==1: iso=iso[0]
+        
+    # Change metallicity and age names for parsec
+    iso['AGE'] = 10**iso['LOGAGE'].copy()
+    iso['METAL'] = iso['MH']
+        
+    # Index
+    isogrid = IsoGrid(iso)
 
-    # make an index for the ages/metals
-    
-    return iso
+    return isogrid
 
 def loadext():
     """ Load extinctions."""
@@ -45,7 +52,11 @@ def loadext():
     nfiles = len(files)
     if nfiles==0:
         raise Exception("No default extinctions file found in "+ddir)
-    ext = Table.read(files[0],format='ascii')
+    tab = Table.read(files[0],format='ascii')
+    # Turn into dictionary
+    ext = {}
+    for i in range(len(tab)):
+        ext[tab['NAME'][i]] = tab['EXTINCTION'][i]
     return ext
     
 def gridparams(ages,metals):
@@ -104,7 +115,7 @@ def getiso(isogrid,pars):
         import pdb; pdb.set_trace()
 
         
-def isoextinct(iso,ext):
+def isoextinct(iso,ext,isonames,extdct):
     """ Apply extinction to the photometry."""
 
     print('apply extinction')
@@ -112,17 +123,21 @@ def isoextinct(iso,ext):
 
     # Just return the photometry array
     
-    # observed data
-    cdata = []
-    for n in catnames:
-        cdata.appen(cat[n])
-    cdata = np.vstack(tuple(cdata)).T
+    # photometry data
+    phot = []
+    for n in isonames:
+        mag = iso[n]
+        mag += extdict[n]*ext  # add extinction
+        phot.append(mag)
+    phot = np.vstack(tuple(phot)).T
+    return phot
     
 
-def grisearch(cat,catnames,isogrid,isonames,caterrnames=None,
-              ages=None,metals=None,extinctions=None,distmod=None):
+def gridsearch(cat,catnames,isonames,isogrid=None,caterrnames=None,
+               ages=None,metals=None,extinctions=None,distmod=None,extdict=None):
     """ Grid search."""
-
+    # extinctions: dictionary of extinction coefficients (Alambda/AV)
+    
     # Do a grid search over distance modulues, age, metallicity and extinction
     
     # Default grid values
@@ -139,12 +154,17 @@ def grisearch(cat,catnames,isogrid,isonames,caterrnames=None,
     nextinctions = len(extinctions)
     ndistmod = len(distmod)
 
+    if isogrid is None:
+        isogrid = loadiso()
+    if extdict is None:
+        extdict = loadext()
+        
     ncat = len(cat)
 
     # Put observed photometry in 2D array
     cphot = []
     for n in catnames:
-        cphot.appen(cat[n])
+        cphot.append(cat[n])
     cphot = np.vstack(tuple(cphot)).T    
 
     # Uncertainties
@@ -155,7 +175,10 @@ def grisearch(cat,catnames,isogrid,isonames,caterrnames=None,
         cphoterr = np.sqrt(cphoterr)
     else:
         cphoterr = np.ones(ncat,float)
-    
+
+    dum=isogrid(1.05e10,-1.75)
+        
+    import pdb; pdb.set_trace()
     
     # Grid search
     sumdist = np.zeros((nages,nmetals,nextinctions,ndistmod),float)
@@ -167,7 +190,7 @@ def grisearch(cat,catnames,isogrid,isonames,caterrnames=None,
             # Extinction and istance modulus search
             for ext,k in enumerate(extinctions):
                 # Prep the isochrone for this distance and extinction
-                isophot = isoextinct(isoam,ext,isonames)      
+                isophot = isoextinct(isoam,ext,isonames,extdict)
                 for distm,l in enumerate(distmod):
                     isophot += distm  # add distance modulue
 
@@ -186,14 +209,19 @@ def grisearch(cat,catnames,isogrid,isonames,caterrnames=None,
     import pdb; pdb.set_trace()
                     
     
-def fit(cat,catnames,isogrid,isonames,caterrnames=None,
-        ages=None,metals=None,extinctions=None,distmod=None):
+def fit(cat=None,catnames=None,isonames=None,isogrid=None,caterrnames=None,
+        ages=None,metals=None,extinctions=None,distmod=None,extdict=None):
     """ Automated isochrone fitting to photometric data."""
-        
+
+    cat = Table.read('/Users/nidever/papers/chronos/NGC104_gaiaedr3_pmcut.fits')
+    catnames = ['BP','RP']
+    caterrnames = ['BPERR','RPERR']
+    isonames = ['GAIAEDR3_GBPMAG','GAIAEDR3_GRPMAG']
+    
     # Do a grid search over distance modulues, age, metallicity and extinction
-    best = gridsearch(cat,catnames,isogrid,isonames,caterrnames=caterrnames,
+    best = gridsearch(cat,catnames,isonames,isogrid=isogrid,caterrnames=caterrnames,
                       ages=ages,metals=metals,extinctions=extinctions,
-                      distmod=distmod)
+                      distmod=distmod,extdict=extdict)
     
     
     # Run MCMC now
