@@ -1,3 +1,4 @@
+# NAME                    EXTINCTION
 DECAM_UMAG                 1.45951
 DECAM_GMAG                 1.18770
 DECAM_RMAG                 0.82950

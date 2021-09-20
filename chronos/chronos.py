@@ -7,13 +7,47 @@
 __authors__ = 'David Nidever <dnidever@montana.edu?'
 __version__ = '20210919'  # yyyymmdd
 
-
+import os
 import time
 import numpy as np
+from glob import glob
 from astropy.wcs import WCS
 from astropy.io import fits
+from astropy.table import Table
 from scipy.spatial import cKDTree
 
+def datadir():
+    """ Return the data directory name."""
+    fil = os.path.abspath(__file__)
+    codedir = os.path.dirname(fil)
+    datadir = codedir+'/data/'
+    return datadir
+
+def loadiso():
+    """ Load all the default isochrone files."""
+    ddir = datadir()
+    files = glob(ddir+'parsec_*fits.gz')
+    nfiles = len(files)
+    if nfiles==0:
+        raise Exception("No default isochrone files found in "+ddir)
+    iso = []
+    for f in files:
+        iso.append(Table.read(f))
+
+    # make an index for the ages/metals
+    
+    return iso
+
+def loadext():
+    """ Load extinctions."""
+    ddir = datadir()
+    files = glob(ddir+'extinctions.txt')
+    nfiles = len(files)
+    if nfiles==0:
+        raise Exception("No default extinctions file found in "+ddir)
+    ext = Table.read(files[0],format='ascii')
+    return ext
+    
 def gridparams(ages,metals):
     """ Generator for parameters in grid search."""
 
@@ -142,6 +176,11 @@ def grisearch(cat,catnames,isogrid,isonames,caterrnames=None,
                     sumdist[i,j,k,l] = sumdist1
                     chisq[i,j,k,l] = chisq1
 
+
+                    # keep track of the smallest distance for each star
+                    # if a star never has a good match, then maybe have an option
+                    # to trim them out (e.g., horizontal branch, AGB)
+                    
     # Get the best match
     
     import pdb; pdb.set_trace()
