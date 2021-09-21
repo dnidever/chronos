@@ -41,9 +41,9 @@ def loadiso():
     iso['METAL'] = iso['MH']
         
     # Index
-    isogrid = IsoGrid(iso)
+    grid = IsoGrid(iso)
 
-    return isogrid
+    return grid
 
 def loadext():
     """ Load extinctions."""
@@ -91,13 +91,13 @@ def isocomparison(cphot,isophot,cphoterr=None):
     return sumdist,chisq
 
 
-def getiso(isogrid,pars):
+def getiso(grid,pars):
     """ Get single isochrone from age/metallicity grid.  Interpolate if necessary."""
 
     age,metal = pars
 
-    uages = np.unique(isogrid['age'])
-    umetals = np.unique(isogrid['metal'])
+    uages = np.unique(grid['age'])
+    umetals = np.unique(grid['metal'])
 
     # Check that the requested values are inside our grid
     if age<np.min(uages) or age>np.max(uages) or metal<np.min(metals) or metal>np.max(metals):
@@ -107,7 +107,7 @@ def getiso(isogrid,pars):
     # Exact match exists
     if age in uages and metal in umetals:
         ind, = np.where((uages==age) & (umetals==metal))
-        return isogrid[ind]
+        return grid[ind]
     # Need to interpolate
     else:
         
@@ -133,7 +133,7 @@ def isoextinct(iso,ext,isonames,extdct):
     return phot
     
 
-def gridsearch(cat,catnames,isonames,isogrid=None,caterrnames=None,
+def gridsearch(cat,catnames,isonames,grid=None,caterrnames=None,
                ages=None,metals=None,extinctions=None,distmod=None,extdict=None):
     """ Grid search."""
     # extinctions: dictionary of extinction coefficients (Alambda/AV)
@@ -154,8 +154,8 @@ def gridsearch(cat,catnames,isonames,isogrid=None,caterrnames=None,
     nextinctions = len(extinctions)
     ndistmod = len(distmod)
 
-    if isogrid is None:
-        isogrid = loadiso()
+    if grid is None:
+        grid = loadiso()
     if extdict is None:
         extdict = loadext()
         
@@ -176,7 +176,7 @@ def gridsearch(cat,catnames,isonames,isogrid=None,caterrnames=None,
     else:
         cphoterr = np.ones(ncat,float)
 
-    dum=isogrid(1.05e10,-1.75)
+    dum=grid(1.05e10,-1.75,names=isonames)
         
     import pdb; pdb.set_trace()
     
@@ -185,7 +185,7 @@ def gridsearch(cat,catnames,isonames,isogrid=None,caterrnames=None,
     for age,i in enumerate(ages):
         for metal,j in enumerate(metals):
             # Get the isochrone for this value
-            isoam = getiso(isogrid,[age,metal])
+            isoam = getiso(grid,[age,metal])
 
             # Extinction and istance modulus search
             for ext,k in enumerate(extinctions):
@@ -209,7 +209,7 @@ def gridsearch(cat,catnames,isonames,isogrid=None,caterrnames=None,
     import pdb; pdb.set_trace()
                     
     
-def fit(cat=None,catnames=None,isonames=None,isogrid=None,caterrnames=None,
+def fit(cat=None,catnames=None,isonames=None,grid=None,caterrnames=None,
         ages=None,metals=None,extinctions=None,distmod=None,extdict=None):
     """ Automated isochrone fitting to photometric data."""
 
@@ -219,7 +219,7 @@ def fit(cat=None,catnames=None,isonames=None,isogrid=None,caterrnames=None,
     isonames = ['GAIAEDR3_GBPMAG','GAIAEDR3_GRPMAG']
     
     # Do a grid search over distance modulues, age, metallicity and extinction
-    best = gridsearch(cat,catnames,isonames,isogrid=isogrid,caterrnames=caterrnames,
+    best = gridsearch(cat,catnames,isonames,grid=grid,caterrnames=caterrnames,
                       ages=ages,metals=metals,extinctions=extinctions,
                       distmod=distmod,extdict=extdict)
     
