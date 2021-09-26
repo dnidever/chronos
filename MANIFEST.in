@@ -1,0 +1,4 @@
+include README.rst
+#include chronos/data/*
+
+prune build
