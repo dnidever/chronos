@@ -35,18 +35,18 @@ Examples
     examples
 
 
-prometheus
-==========
-Here are the various input arguments for command-line script `prometheus`::
+chronos
+=======
+Here are the various input arguments for command-line script `chronos`::
 
-  usage: prometheus [-h] [--outfile OUTFILE] [--figfile FIGFILE] [-d OUTDIR]
-                    [-l] [-p] [-v] [-t]
-                    files [files ...]
+  usage: chronos [-h] [--outfile OUTFILE] [--figfile FIGFILE] [-d OUTDIR]
+                 [-l] [-p] [-v] [-t]
+                 files [files ...]
 
-  Run Chronos on an image
+  Run Chronos on a catalog
 
   positional arguments:
-    files                 Images FITS files or list
+    files                 Catalog FITS files or list
 
   optional arguments:
     -h, --help            show this help message and exit
@@ -69,4 +69,4 @@ Index
     
 .. rubric:: Footnotes
 
-.. [#f1] In Greek mythology, `Chronos <https://en.wikipedia.org/wiki/Chronos>`_ is a Titan that brings fire from the heavens down to humans on earth.
+.. [#f1] `Chronos <https://en.wikipedia.org/wiki/Chronos>`_, is the personification of time in pre-Socratic philosophy and later literature.
