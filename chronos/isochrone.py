@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""ISOGRID.PY - Isochrone grid class
+"""ISOCHRONE.PY - Isochrone and isochrone grid classes
 
 """
 
@@ -8,16 +8,17 @@ __authors__ = 'David Nidever <dnidever@montana.edu?'
 __version__ = '20210920'  # yyyymmdd
 
 import os
-import time
 import numpy as np
-from glob import glob
-from astropy.wcs import WCS
-from astropy.io import fits
 from astropy.table import Table
-from scipy.spatial import cKDTree
 from scipy.interpolate import interp1d
+import copy
+from . import extinction
 
-def isointerp2(iso1,iso2,frac,photnames=None,verbose=False):
+def distmod(iso,distm):
+    """ Change the distance modulus."""
+    pass
+
+def isointerp2(iso1,iso2,frac,photnames=None,maxlabel=9,verbose=False):
     """ Interpolate between two isochrones."""
     # frac: fractional distance for output isochrone
     #  0 is close to iso1 and 1 is close to iso2
@@ -107,7 +108,8 @@ def isointerp2(iso1,iso2,frac,photnames=None,verbose=False):
     
     # Label loop
     count = 0
-    maxl = 9
+    if maxlabel is not None:
+        maxl = maxlabel
     for l in np.arange(1,maxl+1):
         #print(l)
         lab1 = iso1['LABEL']==l
@@ -317,6 +319,106 @@ def isointerp(grid,age,metal,names=None,verbose=False):
 
 # Maybe make separate Iso class for the single isochrones
 
+class Isochrone:
+    def __init__(self,iso):
+        self._age = np.min(iso['AGE'].data)
+        self._metal = np.min(iso['METAL'].data)
+        self._distmod = 0.0
+        self._ext = 0.0
+        
+        self.data = iso
+        self.ndata = len(iso)
+        self._origdata = deep.copy(iso)
+        
+        # Photometric bands
+        colnames = np.char.array(iso.colnames)
+        photind, = np.where((colnames.find('MAG')>-1) & (colnames.find('_')>-1))
+        photnames = list(colnames[photind])
+        self._bands = photnames
+
+    def __call__(self,distmod=None,ext=None,maxlabel=None):
+        """ Return an isochrone with a given distance modulus and extinction."""
+        out = self.copy()
+        # Label limit
+        if maxlabel is not None:
+            gd, = np.where(out.data['LABEL']<=maxlabel)
+            out.data = out.data[gd]
+            out.ndata = len(gd)
+            
+        # Add distance modulus
+        if distmod is not None:
+            for n in self.bands:
+                out[n] += distmod
+        # Add extinction
+        if ext is not None:
+            pass
+        
+        return out
+
+    @property
+    def data(self):
+        """ Return the data."""
+        return self._data
+    
+    @property
+    def distmod(self):
+        """ Return the distance modulus."""
+        return self._distmod
+
+    @setter
+    def distmod(self,distm):
+        """ Set the distance modulus."""
+        if distm != self.distmod:
+            diffdistmod = distm-self._distmod
+            for n in self.bands:
+                self.data[n] += diffdistmod
+            self._distmod = distm
+            
+    @property
+    def distance(self):
+        """ Return the distance in kpc."""
+        return 10**(self.distmod*0.2+1.0)/1e3
+
+    @property
+    def ext(self):
+        """ Return the A(V) extinction."""
+        return self._ext
+
+    @ext.setter
+    def ext(self,extin):
+        """ Set the extinction."""
+        newdata = self._origdata.copy()
+        # Extinct it
+        newdata = extinction.extinct(newdata,extin)
+        self._data = newdata
+        # Set the distance modulus
+        distm = copy.deepcopy(self._distmod)
+        self._distmod = 0.0
+        self.distmod = distm
+        
+    @property
+    def extinction(self):
+        """ Return the A(V) extinction.  Convenience function."""
+        return self.ext 
+    @property
+    def age(self):
+        """ Return the age."""
+        return self._age
+
+    @property
+    def metal(self):
+        """ Return the metallicity."""
+        return self._metal
+
+    @property
+    def bands(self):
+        """ Return the list of bands."""
+        return self._bands
+
+    def copy(self):
+        """ Return a copy of self."""
+        return copy.deepcopy(self)
+    
     
 class IsoGrid:
 
@@ -367,7 +469,7 @@ class IsoGrid:
         s += str(len(self.bands))+' bands: '+', '.join(self.bands)
         return s
         
-    def __call__(self,age,metal,names=None,closest=False,verbose=False):
+    def __call__(self,age,metal,distmod=None,ext=None,names=None,closest=False,verbose=False):
         """ Return the isochrone for this age and metallicity."""
 
         # Check that the requested values are inside our grid
@@ -409,7 +511,14 @@ class IsoGrid:
             out['AGE'] = np.zeros(niso,float)
             for n in outnames:
                 out[n] = iso[n]
+
+            # Add distance modulus
+            if distmod is not None:
+                for n in self.bands:
+                    out[n] += distmod
             
+            # Add extinction
+                
             return out
             
         
@@ -542,4 +651,6 @@ class IsoGrid:
         """ Interpolation grid for this age and metallicity."""
         return isointerp(self,age,metal,names=names,verbose=verbose)
 
-
+    def copy(self):
+        """ Return a copy of self."""
+        return copy.deepcopy(self)
