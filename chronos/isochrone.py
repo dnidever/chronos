@@ -18,7 +18,7 @@ def distmod(iso,distm):
     """ Change the distance modulus."""
     pass
 
-def isointerp2(iso1,iso2,frac,photnames=None,maxlabel=9,verbose=False):
+def isointerp2(iso1,iso2,frac,photnames=None,minlabel=1,maxlabel=7,verbose=False):
     """ Interpolate between two isochrones."""
     # frac: fractional distance for output isochrone
     #  0 is close to iso1 and 1 is close to iso2
@@ -108,9 +108,7 @@ def isointerp2(iso1,iso2,frac,photnames=None,maxlabel=9,verbose=False):
     
     # Label loop
     count = 0
-    if maxlabel is not None:
-        maxl = maxlabel
-    for l in np.arange(1,maxl+1):
+    for l in np.arange(minlabel,maxlabel+1):
         #print(l)
         lab1 = iso1['LABEL']==l
         nlab1 = np.sum(lab1)
@@ -209,7 +207,7 @@ def isointerp2(iso1,iso2,frac,photnames=None,maxlabel=9,verbose=False):
     return out
     
     
-def isointerp(grid,age,metal,names=None,verbose=False):
+def isointerp(grid,age,metal,names=None,minlabel=1,maxlabel=7,verbose=False):
     """ Interpolate isochrones."""
     # Input isochrone grid and desired age/metal
 
@@ -283,14 +281,14 @@ def isointerp(grid,age,metal,names=None,verbose=False):
             iso1 = grid._data[grid._index[grid._ind2ind1[loaind,lomind]]]
             iso2 = grid._data[grid._index[grid._ind2ind1[hiaind,lomind]]]
             frac = (age-loage)/(hiage-loage)
-            isolom = isointerp2(iso1,iso2,frac,names,verbose=verbose)
+            isolom = isointerp2(iso1,iso2,frac,names,minlabel=minlabel,maxlabel=maxlabel,verbose=verbose)
             # high metallicity
             if verbose:
                 print('Interpolating between ages for high metallicity (%6.3f): %6.2e and %6.2e' % (himetal,loage,hiage))        
             iso1 = grid._data[grid._index[grid._ind2ind1[loaind,himind]]]
             iso2 = grid._data[grid._index[grid._ind2ind1[hiaind,himind]]]
             frac = (age-loage)/(hiage-loage)
-            isohim = isointerp2(iso1,iso2,frac,names,verbose=verbose)
+            isohim = isointerp2(iso1,iso2,frac,names,minlabel=minlabel,maxlabel=maxlabel,verbose=verbose)
         # Single metallicity
         else:
             if verbose:
@@ -298,7 +296,7 @@ def isointerp(grid,age,metal,names=None,verbose=False):
             iso1 = grid._data[grid._index[grid._ind2ind1[loaind,lomind]]]
             iso2 = grid._data[grid._index[grid._ind2ind1[hiaind,lomind]]]
             frac = (age-loage)/(hiage-loage)
-            isolom = isointerp2(iso1,iso2,frac,names,verbose=verbose)
+            isolom = isointerp2(iso1,iso2,frac,names,minlabel=minlabel,maxlabel=maxlabel,verbose=verbose)
     # Single age, two metallicities
     else:
         isolom = grid._data[grid._index[grid._ind2ind1[loaind,lomind]]]
@@ -310,7 +308,7 @@ def isointerp(grid,age,metal,names=None,verbose=False):
         if verbose:
             print('Interpolating between metallicites for age (%6.2e): %6.3f and %6.3f' % (age,lometal,himetal))
         frac = (metal-lometal)/(himetal-lometal)
-        iso = isointerp2(isolom,isohim,frac,names,verbose=verbose)
+        iso = isointerp2(isolom,isohim,frac,names,minlabel=minlabel,maxlabel=maxlabel,verbose=verbose)
     else:
         iso = isolom
         
@@ -647,9 +645,9 @@ class IsoGrid:
             return ([loage,lometal],[hiage,lometal])
         return ([loage,lometal],[loage,himetal],[hiage,lometal],[hiage,himetal])
         
-    def interp(self,age,metal,names=None,verbose=False):
+    def interp(self,age,metal,names=None,minlabel=1,maxlabel=7,verbose=False):
         """ Interpolation grid for this age and metallicity."""
-        return isointerp(self,age,metal,names=names,verbose=verbose)
+        return isointerp(self,age,metal,names=names,minlabel=minlabel,maxlabel=maxlabel,verbose=verbose)
 
     def copy(self):
         """ Return a copy of self."""
