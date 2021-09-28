@@ -12,18 +12,12 @@ import numpy as np
 from glob import glob
 from astropy.io import fits
 from astropy.table import Table
-
-def datadir():
-    """ Return the data directory name."""
-    fil = os.path.abspath(__file__)
-    codedir = os.path.dirname(fil)
-    datadir = codedir+'/data/'
-    return datadir
+from . import utils
 
 
 def load(filename=None):
     """ Load extinctions."""
-    ddir = datadir()
+    ddir = utils.datadir()
     if filename is not None:
         files = glob(ddir+'extinctions.txt')
         nfiles = len(files)

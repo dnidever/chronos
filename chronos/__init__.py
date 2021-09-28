@@ -1,4 +1,4 @@
-__all__ = ["chronos","isogrid"]
+__all__ = ["chronos","isochrone","extinction","utils"]
 __version__ = '1.0.0'
 
 

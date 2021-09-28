@@ -12,11 +12,29 @@ import numpy as np
 from astropy.table import Table
 from scipy.interpolate import interp1d
 import copy
-from . import extinction
+from . import extinction,utils
 
-def distmod(iso,distm):
-    """ Change the distance modulus."""
-    pass
+
+def load():
+    """ Load all the default isochrone files."""
+    ddir = utils.datadir()
+    files = glob(ddir+'parsec_*fits.gz')
+    nfiles = len(files)
+    if nfiles==0:
+        raise Exception("No default isochrone files found in "+ddir)
+    iso = []
+    for f in files:
+        iso.append(Table.read(f))
+    if len(iso)==1: iso=iso[0]
+        
+    # Change metallicity and age names for parsec
+    iso['AGE'] = 10**iso['LOGAGE'].copy()
+    iso['METAL'] = iso['MH']
+        
+    # Index
+    grid = IsoGrid(iso)
+
+    return grid
 
 def isointerp2(iso1,iso2,frac,photnames=None,minlabel=1,maxlabel=7,verbose=False):
     """ Interpolate between two isochrones."""
@@ -363,7 +381,7 @@ class Isochrone:
         """ Return the distance modulus."""
         return self._distmod
 
-    @setter
+    @distmod.setter
     def distmod(self,distm):
         """ Set the distance modulus."""
         if distm != self.distmod:

@@ -16,48 +16,7 @@ from astropy.io import fits
 from astropy.table import Table
 from scipy.spatial import cKDTree
 from .isogrid import IsoGrid
-
-def datadir():
-    """ Return the data directory name."""
-    fil = os.path.abspath(__file__)
-    codedir = os.path.dirname(fil)
-    datadir = codedir+'/data/'
-    return datadir
-
-def loadiso():
-    """ Load all the default isochrone files."""
-    ddir = datadir()
-    files = glob(ddir+'parsec_*fits.gz')
-    nfiles = len(files)
-    if nfiles==0:
-        raise Exception("No default isochrone files found in "+ddir)
-    iso = []
-    for f in files:
-        iso.append(Table.read(f))
-    if len(iso)==1: iso=iso[0]
-        
-    # Change metallicity and age names for parsec
-    iso['AGE'] = 10**iso['LOGAGE'].copy()
-    iso['METAL'] = iso['MH']
-        
-    # Index
-    grid = IsoGrid(iso)
-
-    return grid
-
-def loadext():
-    """ Load extinctions."""
-    ddir = datadir()
-    files = glob(ddir+'extinctions.txt')
-    nfiles = len(files)
-    if nfiles==0:
-        raise Exception("No default extinctions file found in "+ddir)
-    tab = Table.read(files[0],format='ascii')
-    # Turn into dictionary
-    ext = {}
-    for i in range(len(tab)):
-        ext[tab['NAME'][i]] = tab['EXTINCTION'][i]
-    return ext
+from . import utils,extinction,isochrone
     
 def gridparams(ages,metals):
     """ Generator for parameters in grid search."""
