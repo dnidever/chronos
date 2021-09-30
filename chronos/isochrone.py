@@ -381,7 +381,8 @@ class Isochrone:
         out += 'Age = %8.3e years\n' % self.age
         out += 'Metallicity = %6.3f\n' % self.metal
         out += 'Distance Modulus = %6.3f\n' % self.distmod
-        out += 'Extinction = %6.3f' % self.ext
+        out += 'Extinction = %6.3f\n' % self.ext
+        out += 'Nbands = %d' % len(self.bands)
         return out 
     
     @property
@@ -499,14 +500,26 @@ class IsoGrid:
         s += str(len(self.bands))+' bands: '+', '.join(self.bands)
         return s
         
-    def __call__(self,age,metal,distmod=None,ext=None,names=None,closest=False,verbose=False):
+    def __call__(self,age,metal,distmod=None,ext=None,names=None,system=None,
+                 closest=False,verbose=False):
         """ Return the isochrone for this age and metallicity."""
 
         # Check that the requested values are inside our grid
         if age<self.agerange[0] or age>self.agerange[1] or metal<self.metalrange[0] or metal>self.metalrange[1]:
             raise ValueError('age=%6.3e metal=%6.2f is outside the isochrone grid. %6.3e<age<%6.3e, %6.2f<metal<%6.2f' %
                              (age,metal,self.agerange[0],self.agerange[1],self.metalrange[0],self.metalrange[1]))
-
+            
+        # The columns that we want
+        if names is None and system is not None:
+            nameind, = np.where(np.char.array(self.bands).find(system.upper())>-1)
+            if len(nameind)==0:
+                raise ValueError('Not photometric bands for system='+system)
+            names = list(np.array(self.bands)[nameind])
+        if names is None:
+            names = self.bands
+        outnames = ['AGE','METAL','MINI','INT_IMF','MASS','LABEL']+names
+        
+        
         # Get the closest isochrone on the grid
         if closest:
             nei = self.neighbors(age,metal)
@@ -530,11 +543,6 @@ class IsoGrid:
             index = self._index[ind1]
             iso = self._data[index]
 
-            # Only return the columns that we want
-            if names is None:
-                names = self.bands
-            outnames = ['AGE','METAL','MINI','INT_IMF','MASS','LABEL']+names
-
             # Initialize the output catalog
             niso = len(iso)
             out = Table()
@@ -542,15 +550,14 @@ class IsoGrid:
             for n in outnames:
                 out[n] = iso[n]
 
-            # Add distance modulus
-            if distmod is not None:
-                for n in self.bands:
-                    out[n] += distmod
-            
-            # Add extinction
+            # Create Isochrone object
+            outiso = Isochrone(out)
                 
-            return out
-            
+            # Add distance modulus and extinction
+            if distmod is not None:
+                outiso.distmod = distmod
+            if ext is not None:
+                outiso.ext = ext
         
         # Exact match exists
         if age in self.ages and metal in self.metals:
@@ -562,11 +569,6 @@ class IsoGrid:
 
             if verbose:
                 print('Exact match for age=%6.2e, metal=%6.3f' % (age,metal))
-            
-            # Only return the columns that we want
-            if names is None:
-                names = self.bands
-            outnames = ['AGE','METAL','MINI','INT_IMF','MASS','LABEL']+names
 
             # Initialize the output catalog
             niso = len(iso)
@@ -574,15 +576,25 @@ class IsoGrid:
             out['AGE'] = np.zeros(niso,float)
             for n in outnames:
                 out[n] = iso[n]
-            
-            return out
+
+            # Create Isochrone object
+            outiso = Isochrone(out) 
         
         # Need to interpolate
         else:
             if verbose:
                 print('Interpolating')
-            return self.interp(age,metal,names=names,verbose=verbose)
-        
+            outiso = self.interp(age,metal,names=names,verbose=verbose)
+
+        # Add distance modulus and extinction
+        if distmod is not None:
+            outiso.distmod = distmod
+        if ext is not None:
+            outiso.ext = ext
+                
+        return outiso
+
+            
     @property
     def ages(self):
         """ Return unique ages."""
@@ -678,7 +690,7 @@ class IsoGrid:
         return ([loage,lometal],[loage,himetal],[hiage,lometal],[hiage,himetal])
         
     def interp(self,age,metal,names=None,minlabel=1,maxlabel=7,verbose=False):
-        """ Interpolation grid for this age and metallicity."""
+        """ Interpolate in grid for this age and metallicity."""
         return isointerp(self,age,metal,names=names,minlabel=minlabel,maxlabel=maxlabel,verbose=verbose)
 
     def copy(self):
