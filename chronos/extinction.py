@@ -18,7 +18,7 @@ from . import utils
 def load(filename=None):
     """ Load extinctions."""
     ddir = utils.datadir()
-    if filename is not None:
+    if filename is None:
         files = glob(ddir+'extinctions.txt')
         nfiles = len(files)
         if nfiles==0:

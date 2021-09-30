@@ -9,6 +9,7 @@ __version__ = '20210920'  # yyyymmdd
 
 import os
 import numpy as np
+from glob import glob
 from astropy.table import Table
 from scipy.interpolate import interp1d
 import copy
@@ -329,6 +330,9 @@ def isointerp(grid,age,metal,names=None,minlabel=1,maxlabel=7,verbose=False):
         iso = isointerp2(isolom,isohim,frac,names,minlabel=minlabel,maxlabel=maxlabel,verbose=verbose)
     else:
         iso = isolom
+
+    # Return an Isochrone object
+    iso = Isochrone(iso)
         
     return iso
 
@@ -342,9 +346,9 @@ class Isochrone:
         self._distmod = 0.0
         self._ext = 0.0
         
-        self.data = iso
+        self._data = iso
         self.ndata = len(iso)
-        self._origdata = deep.copy(iso)
+        self._origdata = copy.deepcopy(iso)
         
         # Photometric bands
         colnames = np.char.array(iso.colnames)
@@ -358,7 +362,7 @@ class Isochrone:
         # Label limit
         if maxlabel is not None:
             gd, = np.where(out.data['LABEL']<=maxlabel)
-            out.data = out.data[gd]
+            out._data = out.data[gd]
             out.ndata = len(gd)
             
         # Add distance modulus
@@ -371,6 +375,15 @@ class Isochrone:
         
         return out
 
+    def __repr__(self):
+        """ String representation."""
+        out = self.__class__.__name__+'\n'
+        out += 'Age = %8.3e years\n' % self.age
+        out += 'Metallicity = %6.3f\n' % self.metal
+        out += 'Distance Modulus = %6.3f\n' % self.distmod
+        out += 'Extinction = %6.3f' % self.ext
+        return out 
+    
     @property
     def data(self):
         """ Return the data."""
@@ -387,7 +400,7 @@ class Isochrone:
         if distm != self.distmod:
             diffdistmod = distm-self._distmod
             for n in self.bands:
-                self.data[n] += diffdistmod
+                self._data[n] += diffdistmod
             self._distmod = distm
             
     @property
@@ -405,12 +418,13 @@ class Isochrone:
         """ Set the extinction."""
         newdata = self._origdata.copy()
         # Extinct it
-        newdata = extinction.extinct(newdata,extin)
+        newdata = extinction.extinct(newdata,extin,isonames=self.bands)
         self._data = newdata
         # Set the distance modulus
         distm = copy.deepcopy(self._distmod)
         self._distmod = 0.0
         self.distmod = distm
+        self._ext = extin
         
     @property
     def extinction(self):
