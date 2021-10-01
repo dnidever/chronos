@@ -11,6 +11,7 @@ import os
 import numpy as np
 from glob import glob
 from astropy.table import Table
+from astropy.io import fits
 from scipy.interpolate import interp1d
 import copy
 from . import extinction,utils
@@ -453,6 +454,45 @@ class Isochrone:
         """ Return the list of bands."""
         return self._bands
 
+    @classmethod
+    def read(cls,filename):
+        """ Read in an isochrone file."""
+        hdu = fits.open(filename)
+        head = hdu[0].header
+        data = Table(hdu[1].data)
+        extdicttable = hdu[2].data
+        extdict = {}
+        for n in extdicttable.names:
+            extdict[n] = extdicttable[n][0]
+        age = head['AGE']
+        metal = head['METAL']
+        ext = head['EXT']
+        distmod = head['DISTMOD']
+        iso = Isochrone(data,extdict=extdict)
+        iso.ext = ext
+        iso.distmod = distmod
+        return iso
+        
+    def write(self,filename):
+        """ Write an isochrone to a file."""
+        if os.path.exists(filename): os.remove(filename)
+        hdu = fits.HDUList()
+        hdu.append(fits.table_to_hdu(self._data))
+        hdu[0].header['AGE'] = self.age
+        hdu[0].header['METAL'] = self.metal
+        hdu[0].header['EXT'] = self.ext
+        hdu[0].header['DISTMOD'] = self.distmod
+        extdict = list(self._extdict.items())
+        extdicttable = Table()
+        key,val = extdict[0]
+        extdicttable[key] = np.zeros(1,float)+val
+        for i in np.arange(1,len(extdict)):
+            key,val = extdict[i]
+            extdicttable[key] = val
+        hdu.append(fits.table_to_hdu(extdicttable))
+        hdu.writeto(filename,overwrite=True)
+        hdu.close()
+        
     def copy(self):
         """ Return a copy of self."""
         return copy.deepcopy(self)
