@@ -19,6 +19,7 @@ import emcee
 import corner
 import matplotlib
 import matplotlib.pyplot as plt
+from dlnpyutils import utils as dln
 from . import utils,extinction,isochrone
     
 def gridparams(ages,metals):
@@ -28,7 +29,7 @@ def gridparams(ages,metals):
         for m in metals:
             yield (a,m)
 
-def photprep(cat,names,errnames=None):
+def photprep(cat,names,errnames=None,verbose=False):
 
     ncat = len(cat)
     
@@ -55,7 +56,8 @@ def photprep(cat,names,errnames=None):
         cstarbad = np.sum(cbad,axis=1)            
         cphot = cphot[cstarbad==0,:]
         cphoterr = cphoterr[cstarbad==0]
-        print('Trimming out '+str(ncbad)+' stars with bad photometry')
+        if verbose:
+            print('Trimming out '+str(ncbad)+' stars with bad photometry')
 
     return cphot,cphoterr
 
@@ -444,7 +446,7 @@ def fit_mcmc(cat,catnames,grid,isonames,caterrnames=None,initpar=None,
         
     return out,mciso
 
-def cmdfigure(figfile,cat,catnames,iso,isonames,out,annotlabels=None,figsize=10,verbose=False):
+def cmdfigure(figfile,cat,catnames,iso,isonames,out,annotlabels=None,figsize=10,title=None,verbose=False):
 
     """
     Make diagnostic figure.
@@ -466,10 +468,12 @@ def cmdfigure(figfile,cat,catnames,iso,isonames,out,annotlabels=None,figsize=10,
        Catalog of best-fitting values to use for the annotations.
     annotlabels : list, optional
        The list of labels to use for the annotation.  Default is ['age','metal','ext','distmod'].
-    verbose : boolean, optional
-       Verbose output.  Default is True.
     figsize : float, optional
        Figure size to use.  Default is 10 inches.
+    title : str, optional
+       The figure plot title.  Default is "Chronos Isochrone Fit".
+    verbose : boolean, optional
+       Verbose output.  Default is True.
 
     Returns
     -------
@@ -482,28 +486,32 @@ def cmdfigure(figfile,cat,catnames,iso,isonames,out,annotlabels=None,figsize=10,
          cmdfigure(figfile,cat,catnames,grid,isonames,out,verbose=True,annotlabels=annotlabels)
 
     """
-
-    
-    import pdb; pdb.set_trace()
     
     if annotlabels is None:
         annotlabels = ['age','metal','ext','distmod']
+    if title is None:
+        title = 'Chronos Isochrone Fit'
     matplotlib.use('Agg')
     if os.path.exists(figfile): os.remove(figfile)
     nlegcol = 2
 
     fig,ax = plt.subplots()
-    fig.set_figheight(figsize*0.5)
-    fig.set_figwidth(figsize)
+    fig.set_figheight(figsize)
+    fig.set_figwidth(figsize*0.5)
 
     # Make a color of the first two bands
     # color = band1-band2
     # magnitude = band2
-    catcolor = cat[catnames[0]]-cat[catnames[1]]
-    catmag = cat[catnames[1]]
-    isocolor = iso.data[isonames[0]]-iso.data[isonames[1]]
-    isomag = iso.data[isonames[1]]
-    plt.scatter(catcolor,catmag,'b',label='Data',linewidth=1)
+    cphot,cerrphot = photprep(cat,catnames)
+    catcolor = cphot[:,0]-cphot[:,1]
+    catmag = cphot[:,1]
+    isocolor = iso.data[isonames[0]].data-iso.data[isonames[1]].data
+    isomag = iso.data[isonames[1]].data
+    norm = matplotlib.colors.LogNorm()
+    plt.hist2d(catcolor,catmag,label='Data',bins=100,cmap='gray_r',norm=norm)
+
+    plt.colorbar(label='Nstars',orientation='horizontal',anchor=(0.5,1.0),pad=0.08)
+    #plt.scatter(catcolor,catmag,c='b',label='Data',s=5)
     # plotting isochrone, deal with gaps
     plt.plot(isocolor,isomag,'r',label='Isochrone',linewidth=1,alpha=0.8)
     leg = ax.legend(loc='upper left', frameon=True, framealpha=0.8, ncol=nlegcol)
@@ -511,17 +519,21 @@ def cmdfigure(figfile,cat,catnames,iso,isonames,out,annotlabels=None,figsize=10,
     plt.ylabel('Magnitude ('+catnames[1]+')')
     xr = dln.minmax(catcolor)
     yr = dln.minmax(catmag)
-    yr = [yr[0]-dln.valrange(yr)*0.15,yr[1]+dln.valrange(yr)*0.005]
+    yr = [yr[0]-dln.valrange(yr)*0.05,yr[1]+dln.valrange(yr)*0.05]
+    yr = np.flip(yr)
     plt.xlim(xr)
     plt.ylim(yr)
-    plt.title(spec.filename)
-    ax.annotate(r'Age=%5.1f$\pm$%5.1f  metal=%5.2f$\pm$%5.2f  ext=%5.2f$\pm$%5.2f   distmod=%5.2f$\pm$%5.2f   chisq=%5.2f' %
-                (out['age'], out['ageerr'], out['metal'], out['metalerr'], out['ext'], out['exterr'], out['distmod'], out['distmoderr'], out['chisq']),
-                xy=(np.mean(xr), yr[0]+dln.valrange(yr)*0.05),ha='center')
+    plt.title(title)
+    string = r'Age=%5.2e$\pm$%5.1e  metal=%5.2f$\pm$%5.2f' % \
+               (out['age'][0],out['ageerr'][0],out['metal'][0],out['metalerr'][0])
+    string += '\n'
+    string += 'ext=%5.2f$\pm$%5.2f  distmod=%5.2f$\pm$%5.2f' % \
+               (out['ext'][0],out['exterr'][0],out['distmod'][0],out['distmoderr'][0])
+    ax.annotate(string,xy=(np.mean(xr),yr[0]-dln.valrange(yr)*0.05),ha='center',color='black')
     plt.savefig(figfile,bbox_inches='tight')
     plt.close(fig)
     if verbose is True: print('Figure saved to '+figfile)
-
+    
     
 def fit(cat,catnames,isonames,grid=None,caterrnames=None,
         ages=None,metals=None,extinctions=None,distmod=None,initpar=None,
@@ -580,59 +592,57 @@ def fit(cat,catnames,isonames,grid=None,caterrnames=None,
 
     """
 
-    #cat = Table.read('/Users/nidever/papers/chronos/NGC104_gaiaedr3_pmcut.fits')
-    #catnames = ['BP','RP']
-    #caterrnames = ['BPERR','RPERR']
-    #isonames = ['GAIAEDR3_GBPMAG','GAIAEDR3_GRPMAG']
-
     if grid is None:
         grid = isochrone.load()
     if extdict is None:
         extdict = extinction.load()
     
     # Do a grid search over distance modulues, age, metallicity and extinction
-    #if initpar is None:
-    #    bestval,chisq = gridsearch(cat,catnames,grid,isonames,caterrnames=caterrnames,
-    #                               ages=ages,metals=metals,extinctions=extinctions,
-    #                               distmod=distmod,fixed=fixed,extdict=extdict)
-    #else:
-    #    bestval = initpar
+    if initpar is None:
+        if verbose: print('Performing grid search')
+        bestval,chisq = gridsearch(cat,catnames,grid,isonames,caterrnames=caterrnames,
+                                   ages=ages,metals=metals,extinctions=extinctions,
+                                   distmod=distmod,fixed=fixed,extdict=extdict)
+    else:
+        bestval = initpar
 
-    bestval = [7399999999.999999, -2.0, 0.5, 12.5]
-    chisq = 15578909.947923563
+    #bestval = [7399999999.999999, -2.0, 0.5, 12.5]
+    #chisq = 15578909.947923563
     
     # Run MCMC now
-    #mcout,mciso = fit_mcmc(cat,catnames,grid,isonames,caterrnames=caterrnames,
-    #                       initpar=bestval,extdict=extdict,cornername=cornername)
+    if verbose: print('Running MCMC')
+    mcout,mciso = fit_mcmc(cat,catnames,grid,isonames,caterrnames=caterrnames,
+                           initpar=bestval,extdict=extdict,cornername=cornername)
 
+    
+    if verbose is True:
+        print('Final parameters:')
+        printpars(mcout['pars_ml'],mcout['parerr'])
+        print('chisq = %5.2f' % mcout['chisq'])
+    dtype = np.dtype([('age',np.float32),('ageerr',np.float32),('metal',np.float32),('metalerr',np.float32),
+                      ('ext',np.float32),('exterr',np.float32),('distmod',np.float32),('distmoderr',np.float32),
+                      ('distance',np.float32),('chisq',np.float32)])
+    out = np.zeros(1,dtype=dtype)
+    out['age'] = mcout['pars_ml'][0][0]
+    out['ageerr'] = mcout['parerr'][0][0]  
+    out['metal'] = mcout['pars_ml'][0][1]
+    out['metalerr'] =   mcout['parerr'][0][1]  
+    out['ext'] = mcout['pars_ml'][0][2]
+    out['exterr'] = mcout['parerr'][0][2]  
+    out['distmod'] = mcout['pars_ml'][0][3]
+    out['distmoderr'] = mcout['parerr'][0][3]  
+    out['distance'] = 10**((out['distmod']+5)/5.)/1e3
+    out['chisq'] = mcout['chisq']
+
+    #out = Table.read('NGC104_chronos_out.fits')
+    #mciso = Table.read('NGC104_mciso.fits')
+    #mciso = isochrone.Isochrone(mciso)
+    #mciso._ext = out['ext'][0]
+    #mciso._distmod = out['distmod'][0]
+    
+    #figfile = 'NGC104_isofit.png'
 
     #import pdb; pdb.set_trace()
-    
-    #if verbose is True:
-    #    print('Final parameters:')
-    #    printpars(mcout['pars_ml'],mcout['parerr'])
-    #    print('chisq = %5.2f' % mcout['chisq'])
-    #dtype = np.dtype([('age',np.float32),('ageerr',np.float32),('metal',np.float32),('metalerr',np.float32),
-    #                  ('ext',np.float32),('exterr',np.float32),('distmod',np.float32),('distmoderr',np.float32),
-    #                  ('distance',np.float32),('chisq',np.float32)])
-    #out = np.zeros(1,dtype=dtype)
-    #out['age'] = mcout['pars_ml'][0][0]
-    #out['ageerr'] = mcout['parerr'][0][0]  
-    #out['metal'] = mcout['pars_ml'][0][1]
-    #out['metalerr'] =   mcout['parerr'][0][1]  
-    #out['ext'] = mcout['pars_ml'][0][2]
-    #out['exterr'] = mcout['parerr'][0][2]  
-    #out['distmod'] = mcout['pars_ml'][0][3]
-    #out['distmoderr'] = mcout['parerr'][0][3]  
-    #out['distance'] = 10**((out['distmod']+5)/5.)/1e3
-    #out['chisq'] = mcout['chisq']
-
-    out = Table.read('NGC104_chronos_out.fits')
-    mciso = Table.read('NGC104_mciso.fits')
-    
-    figfile = 'NGC104_isofit.png'
-
-    import pdb; pdb.set_trace()
     
     # Make output plot
     if figfile is not None:
