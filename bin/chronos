@@ -30,6 +30,8 @@ if __name__ == "__main__":
     parser.add_argument('--initpar', type=str, nargs=1, default='', help='Initial estimates for [age,metal,ext,distmod]')
     parser.add_argument('--caterrnames', type=str, nargs=1, default='', help='List of photometric uncertainty column names')
     parser.add_argument('--fixed', type=str, nargs=1, default='', help='Parameters to hold fixed (e.g. AGE:5e9,METAL:-0.75)')
+    parser.add_argument('--reject', action='store_true', help='Reject outliers')
+    parser.add_argument('--nsigrej', type=float, nargs=1, default=3.0, help='Outlier rejection Nsigma')
     parser.add_argument('--extdict', type=str, nargs=1, default='', help='Extinction coefficients (e.g. [SDSS_UMAG:1.57465,SDSS_GMAG:1.22651])')
     parser.add_argument('--figfile', type=str, nargs=1, default='', help='Figure filename')    
     parser.add_argument('-d','--outdir', type=str, nargs=1, default='', help='Output directory')        
@@ -82,6 +84,8 @@ if __name__ == "__main__":
             fixed[str(arr[0]).upper()] = float(arr[1])
     else:
         fixed = None
+    reject = args.reject
+    nsigrej = dln.first_el(args.nsigrej)
     # Extinction coefficients
     extdict = dln.first_el(args.extdict)
     if extdict != '':
@@ -179,7 +183,7 @@ if __name__ == "__main__":
             # Run Prometheus
             out, bestiso = chronos.chronos.fit(cat,catnames,isonames,caterrnames=caterrnames,
                                                initpar=initpar,fixed=fixed,extdict=extdict,cornername=corner,
-                                               figfile=figfile,verbose=verbose)
+                                               reject=reject,nsigrej=nsigrej,figfile=figfile,verbose=verbose)
                 
             # Save the output
             if inpoutfile!='':

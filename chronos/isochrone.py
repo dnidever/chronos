@@ -13,6 +13,7 @@ from glob import glob
 from astropy.table import Table
 from astropy.io import fits
 from scipy.interpolate import interp1d
+from dlnpyutils import utils as dln
 import copy
 from . import extinction,utils
 
@@ -235,9 +236,9 @@ def isointerp(grid,age,metal,names=None,minlabel=1,maxlabel=7,verbose=False):
     # Ages
     #  check for exact match
     if age in grid.ages:
-        loaind, = np.where(grid.ages==age)
+        loaind = dln.first_el(np.where(grid.ages==age)[0])
         hiaind = None
-        loage = grid.ages[loaind[0]]
+        loage = grid.ages[loaind]
     else:
         loaind, = np.where(grid.ages <= age)
         hiaind, = np.where(grid.ages > age)
@@ -255,9 +256,9 @@ def isointerp(grid,age,metal,names=None,minlabel=1,maxlabel=7,verbose=False):
     # Metals
     #  check for exact match
     if metal in grid.ages:
-        lomind, = np.where(grid.metals==metal)
+        lomind = dln.first_el(np.where(grid.metals==metal)[0])
         himind = None
-        lometal = grid.metals[lomind[0]]
+        lometal = grid.metals[lomind]
     else:
         lomind, = np.where(grid.metals <= metal)
         himind, = np.where(grid.metals > metal)
@@ -272,7 +273,7 @@ def isointerp(grid,age,metal,names=None,minlabel=1,maxlabel=7,verbose=False):
             himind = np.max(himind)
         lometal = grid.metals[lomind]
         himetal = grid.metals[himind]            
-            
+        
     # Now do the interpolation
     if hiaind is None:
         nages = 1
@@ -282,13 +283,7 @@ def isointerp(grid,age,metal,names=None,minlabel=1,maxlabel=7,verbose=False):
         nmetals = 1
     else:
         nmetals = 2
-
-    #iso1 = grid._data[grid._index[grid._ind2ind1[loaind,lomind]]]
-    #iso2 = grid._data[grid._index[grid._ind2ind1[loaind,himind]]]
-    #frac = (metal-lometal)/(himetal-lometal)
-    #isoloa = isointerp2(iso1,iso2,frac)  
-
-    
+        
     # Interpolate in age first
     #-------------------------
     # two ages
@@ -321,7 +316,7 @@ def isointerp(grid,age,metal,names=None,minlabel=1,maxlabel=7,verbose=False):
     else:
         isolom = grid._data[grid._index[grid._ind2ind1[loaind,lomind]]]
         isohim = grid._data[grid._index[grid._ind2ind1[loaind,himind]]]
-
+            
     # Interpolate in metallicity
     #---------------------------
     if himind is not None:
