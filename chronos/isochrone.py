@@ -116,8 +116,8 @@ def isointerp2(iso1,iso2,frac,photnames=None,minlabel=1,maxlabel=7,verbose=False
     # Initialize the output catalog
     nout = int(1.5*np.max([niso1,niso2]))
     out = Table()
-    out['AGE'] = np.zeros(nout,float)+age1
-    out['METAL'] = metal1
+    out['AGE'] = np.zeros(nout,float)+(age1*(1-frac)+age2*frac)
+    out['METAL'] = metal1*(1-frac)+metal2*frac
     out['MINI'] = 0.0
     out['INT_IMF'] = 0.0
     out['MASS'] = 0.0        
@@ -194,14 +194,14 @@ def isointerp2(iso1,iso2,frac,photnames=None,minlabel=1,maxlabel=7,verbose=False
                 #if nlab1<3 or nlab2<3: kind='linear'
                 #data1 = interp1d(mini1,iso1[n][lab1],kind=kind)(mini)
                 #data2 = interp1d(mini2,iso2[n][lab2],kind=kind)(mini)
-                if nxmini<3: kind='linear'
+                if nlab1<3 or nlab2<3: kind='linear'
                 if dointerp1:
                     data1 = interp1d(xmini1,iso1[n][lab1],kind=kind)(xmini)
                     data2 = iso2[n][lab2]
                 else:
                     data1 = iso1[n][lab1]
                     data2 = interp1d(xmini2,iso2[n][lab2],kind=kind)(xmini)
-
+                        
                 # use linear interpolation to the value at FRAC
                 data = data1*(1-frac)+data2*frac
                 out[n][count:count+nxmini] = data
@@ -222,7 +222,7 @@ def isointerp2(iso1,iso2,frac,photnames=None,minlabel=1,maxlabel=7,verbose=False
         
     # Trim extra elements
     out = out[out['LABEL']>0]
-
+    
     return out
     
     
@@ -340,7 +340,7 @@ def isointerp(grid,age,metal,names=None,minlabel=1,maxlabel=7,verbose=False):
 # Maybe make separate Iso class for the single isochrones
 
 class Isochrone:
-    def __init__(self,iso):
+    def __init__(self,iso,extdict=None):
         self._age = np.min(iso['AGE'].data)
         self._metal = np.min(iso['METAL'].data)
         self._distmod = 0.0
@@ -356,6 +356,13 @@ class Isochrone:
         photnames = list(colnames[photind])
         self._bands = photnames
 
+        # Extinction dictionary
+        if extdict is not None:
+            self._extdict = extdict
+        else:
+            self._extdict = extinction.load()
+        
+        
     def __call__(self,distmod=None,ext=None,maxlabel=None):
         """ Return an isochrone with a given distance modulus and extinction."""
         out = self.copy()
@@ -419,7 +426,7 @@ class Isochrone:
         """ Set the extinction."""
         newdata = self._origdata.copy()
         # Extinct it
-        newdata = extinction.extinct(newdata,extin,isonames=self.bands)
+        newdata = extinction.extinct(newdata,extin,extdict=self._extdict,isonames=self.bands)
         self._data = newdata
         # Set the distance modulus
         distm = copy.deepcopy(self._distmod)
@@ -453,7 +460,7 @@ class Isochrone:
     
 class IsoGrid:
 
-    def __init__(self,iso):
+    def __init__(self,iso,extdict=None):
         uages = np.unique(iso['AGE'].data)
         self._ages = uages
         self._agerange = [np.min(uages),np.max(uages)]
@@ -491,6 +498,13 @@ class IsoGrid:
         self._npoints = np.array(npoints)
         self._ind2ind1 = ind2ind1
 
+        # Extinction dictionary
+        if extdict is not None:
+            self._extdict = extdict
+        else:
+            self._extdict = extinction.load()
+
+        
     def __repr__(self):
         """ Print out string representation."""
         s = repr(self.__class__)+'\n'
@@ -500,7 +514,7 @@ class IsoGrid:
         s += str(len(self.bands))+' bands: '+', '.join(self.bands)
         return s
         
-    def __call__(self,age,metal,distmod=None,ext=None,names=None,system=None,
+    def __call__(self,age,metal,ext=None,distmod=None,names=None,system=None,
                  closest=False,verbose=False):
         """ Return the isochrone for this age and metallicity."""
 
@@ -551,7 +565,7 @@ class IsoGrid:
                 out[n] = iso[n]
 
             # Create Isochrone object
-            outiso = Isochrone(out)
+            outiso = Isochrone(out,extdict=self._extdict)
                 
             # Add distance modulus and extinction
             if distmod is not None:
@@ -578,14 +592,15 @@ class IsoGrid:
                 out[n] = iso[n]
 
             # Create Isochrone object
-            outiso = Isochrone(out) 
+            outiso = Isochrone(out,extdict=self._extdict) 
         
         # Need to interpolate
         else:
             if verbose:
                 print('Interpolating')
             outiso = self.interp(age,metal,names=names,verbose=verbose)
-
+            outiso._extdict = self._extdict
+            
         # Add distance modulus and extinction
         if distmod is not None:
             outiso.distmod = distmod
