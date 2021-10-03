@@ -20,7 +20,7 @@ import corner
 import matplotlib
 import matplotlib.pyplot as plt
 from dlnpyutils import utils as dln
-from . import utils,extinction,isochrone
+from . import utils,extinction,isochrone,leastsquares as lsq
     
 def gridparams(ages,metals):
     """ Generator for parameters in grid search."""
@@ -29,7 +29,7 @@ def gridparams(ages,metals):
         for m in metals:
             yield (a,m)
 
-def photprep(cat,names,errnames=None,verbose=False):
+def photprep(cat,names,iso=False,errnames=None,verbose=False):
 
     ncat = len(cat)
     
@@ -39,6 +39,8 @@ def photprep(cat,names,errnames=None,verbose=False):
         cphot.append(cat[n])
     cphot = np.vstack(tuple(cphot)).T    
 
+    if iso: return cphot
+    
     # Uncertainties
     if errnames is not None:
         cphoterr = np.zeros(ncat,float)
@@ -380,7 +382,138 @@ def emcee_lnprob(theta, x, y, yerr, grid, isonames, fixpars, fixparvals):
         return -np.inf
     return lp + emcee_lnlike(theta, x, y, yerr, grid, isonames, fixpars, fixparvals)
 
+def jaciso(x,pars,names=None,cphot=None,cphoterr=None,grid=None,isonames=None,
+           fixpars=None,fixparvals=None):
+    """ Calculate jacobian for Isochrone fits."""
+
+    ncat = len(cphoterr)
+    nfreepars = np.sum(~fixpars)
+    jac = np.zeros((ncat,nfreepars),float)
+    pcount = 0
     
+    # Original model
+    iso0 = grid(*pars)
+    isophot0 = photprep(iso0,isonames,iso=True)
+    sumdist0,meddist0,chisq0,dist0 = isocomparison(cphot,isophot0,cphoterr)
+    
+    # Derivative in age
+    if fixpars[0]==False:
+        pars1 = np.array(pars).copy()
+        pars1[0] += 0.01*pars[0]
+        iso1 = grid(*pars1)
+        isophot1 = photprep(iso1,isonames,iso=True)
+        sumdist1,meddist1,chisq1,dist1 = isocomparison(cphot,isophot1,cphoterr)
+        jac[:,pcount] = dist1-dist0
+        pcount += 1
+        
+    # Derivative in metallicity
+    if fixpars[1]==False:
+        pars2 = np.array(pars).copy()
+        pars2[0] += 0.02
+        iso2 = grid(*pars2)
+        isophot2 = photprep(iso2,isonames,iso=True)
+        sumdist2,meddist2,chisq2,dist2 = isocomparison(cphot,isophot2,cphoterr)
+        jac[:,pcount] = dist2-dist0
+        pcount += 1
+        
+    # Derivative in extinction
+    if fixpars[2]==False:
+        iso3 = iso0.copy()
+        iso3.ext += 0.02
+        isophot3 = photprep(iso3,isonames,iso=True)
+        sumdist3,meddist3,chisq3,dist3 = isocomparison(cphot,isophot3,cphoterr)
+        jac[:,pcount] = dist3-dist0
+        pcount += 1
+    
+    # Derivative in distmod
+    if fixpars[3]==False:
+        iso4 = iso0.copy()
+        iso4.distmod += 0.2
+        isophot4 = photprep(iso1,isonames,iso=True)
+        sumdist4,meddist4,chisq4,dist4 = isocomparison(cphot,isophot4,cphoterr)
+        jac[:,pcount] = dist4-dist0
+        pcount += 1
+    
+    return dist0,jac,chisq0
+
+
+def fit_lsq(cat,catnames,grid,isonames,initpar,caterrnames=None,fixed=None):
+    """ Isochrone fit with least-squares routines."""
+    
+    ncat = len(cat)
+
+    cphot,cphoterr = photprep(cat,catnames,caterrnames)
+    
+    # Checked any fixed values
+    fixpars = np.zeros(4,bool)
+    if fixed is not None:
+        for n in fixed.keys():
+            if n.lower()=='age':
+                initpar[0] = fixed[n]
+                fixpars[0] = True
+            elif n.lower()=='logage':
+                initpar[0] = 10**fixed[n]
+                fixpars[0] = True                
+            elif n.lower()=='metal' or n.lower()=='feh' or n.lower()=='fe_h':
+                initpar[1] = fixed[n]
+                fixpars[1] = True                
+            elif n.lower()=='ext' or n.lower()=='extinction':
+                initpar[2] = fixed[n]
+                fixpars[2] = True                
+            elif n.lower()=='distance' or n.lower()=='dist':
+                initpar[3] = np.log10(fixed[n]*1e3)*5-5
+                fixpars[3] = True                
+            elif n.lower()=='distmod':
+                initpar[3] = fixed[n]
+                fixpars[4] = True
+    nfixpars = np.sum(fixpars)
+    nfreepars = np.sum(~fixpars)
+
+    # Iterate
+    niter = 0
+    maxpercdiff = 1e10
+    bestpar = initpar.copy()
+    npars = len(bestpar)
+    x = np.arange(ncat)
+    method = 'svd'
+    while (niter<maxiter and maxpercdiff>minpercdiff):
+        start0 = time.time()
+
+        # Get the Jacobian and model
+        #  only for pixels that are affected by the "free" parameters
+        resid,jac,chisq = jaciso(x,bestpar,names=catnames,cphot=cphot,cphoterr=cphoterr,grid=grid,
+                                 isonames=isonames,fixpars=fixpars,fixparvals=initpar):
+        # Weights
+        wt = 1/cphoterr**2
+        # Solve Jacobian
+        dbeta = lsq.jac_solve(jac,resid,method=method,weight=wt)
+                
+        # Update parameters
+        oldpar = bestpar.copy()
+        bestpar += dbeta
+        # Check differences and changes
+        diff = np.abs(bestpar-oldpar)
+        percdiff = diff/oldpar*100        
+        maxpercdiff = np.max(percdiff)
+
+        ## Get model and chisq
+        #bestmodel = model(xdata,*pars,allparams=True)
+        #resid = imflatten-bestmodel
+        #chisq = np.sum(resid**2/gf.errflatten**2)
+              
+        #if verbose:
+        #    print('Iter = ',gf.niter)
+        #    print('Pars = ',gf.pars)
+        #    print('Percent diff = ',percdiff)
+        #    print('Diff = ',diff)
+        #    print('chisq = ',chisq)
+                
+        print('iter dt = ',time.time()-start0)
+
+        niter += 1     # increment counter
+
+
+    return pars
 
 def fit_mcmc(cat,catnames,grid,isonames,caterrnames=None,initpar=None,
              fixed=None,steps=100,extdict=None,cornername=None,verbose=False):
@@ -715,6 +848,8 @@ def fit(cat,catnames,isonames,grid=None,caterrnames=None,
     else:
         bestval = initpar
 
+    lsqpars,lsqchisq = fit_lsq(cat,catnames,grid,isonames,bestval,caterrnames=caterrnames,fixed=fixed)
+        
     # Outlier rejection
     if reject:
         bestiso = grid(bestval[0],bestval[1],bestval[2],bestval[3])
@@ -724,7 +859,11 @@ def fit(cat,catnames,isonames,grid=None,caterrnames=None,
         cat = newcat
 
     # Need a least-squares-like optimization routine here!
-        
+    # use my lsq functions to do this
+    # try computing the jacobian with distance, but that might not work
+    # can do it by using median(distance) as a single "pixel"
+    # add my prometheus leastsquares.py module to dlnpyutils
+    
     # Run MCMC now
     if verbose: print('Running MCMC')
     mcout,mciso = fit_mcmc(cat,catnames,grid,isonames,caterrnames=caterrnames,
