@@ -24,8 +24,8 @@ except ImportError:
 if __name__ == "__main__":
     parser = ArgumentParser(description='Run Chronos on a photometry catalog')
     parser.add_argument('files', type=str, nargs='+', help='Photometry catalog FITS files or list')
-    parser.add_argument('catnames', type=str, nargs=1, default='', help='List of photometry column names')
-    parser.add_argument('isonames', type=str, nargs=1, default='', help='List of isochrone photometry column names')
+    parser.add_argument('--catnames', type=str, nargs=1, default='', help='List of photometry column names')
+    parser.add_argument('--isonames', type=str, nargs=1, default='', help='List of isochrone photometry column names')
     parser.add_argument('--outfile', type=str, nargs=1, default='', help='Output filename')
     parser.add_argument('--initpar', type=str, nargs=1, default='', help='Initial estimates for [age,metal,ext,distmod]')
     parser.add_argument('--caterrnames', type=str, nargs=1, default='', help='List of photometric uncertainty column names')
@@ -53,6 +53,8 @@ if __name__ == "__main__":
         if inpcatnames.startswith('['): inpcatnames=inpcatnames[1:]
         if inpcatnames.endswith(']'): inpcatnames=inpcatnames[:-1]        
         catnames = np.array(inpcatnames.split(','))
+    else:
+        catnames = None
     # isonames
     isonames = dln.first_el(args.isonames)
     if isonames != '':
@@ -60,7 +62,9 @@ if __name__ == "__main__":
         # remove any leading or training []        
         if inpisonames.startswith('['): inpisonames=inpisonames[1:]
         if inpisonames.endswith(']'): inpisonames=inpisonames[:-1]        
-        isonames = np.array(inpisonames.split(','))        
+        isonames = np.array(inpisonames.split(','))
+    else:
+        isonames = None
     inpoutfile = dln.first_el(args.outfile)
     # caterrnames
     caterrnames = dln.first_el(args.caterrnames)
@@ -70,6 +74,8 @@ if __name__ == "__main__":
         if inpcaterrnames.startswith('['): inpcaterrnames=inpcaterrnames[1:]
         if inpcaterrnames.endswith(']'): inpcaterrnames=inpcaterrnames[:-1]        
         caterrnames = np.array(inpcaterrnames.split(','))
+    else:
+        caterrnames = None
     # Parameters to hold fixed
     fixed = dln.first_el(args.fixed)
     if fixed != '':

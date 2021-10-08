@@ -30,6 +30,54 @@ def gridparams(ages,metals):
         for m in metals:
             yield (a,m)
 
+def autodetectnames(cat,grid,catnames=None,caterrnames=None,isonames=None):
+    """ Auto-detect column names to use."""
+
+    gnames = np.char.array(grid.bands).lower()
+    cnames = np.char.array(cat.colnames).lower()
+    
+    # Try to match catalog names with isochrone names
+    if catnames is None:
+        # Find catalog names that match isochrone column names
+        if isonames is None:
+            ind1,ind2 = dln.match(cnames,gnames)
+            nmatch = len(ind1)
+            if nmatch>0:
+                catnames = list(np.array(cat.colnames)[ind1])
+                isonames = list(np.array(grid.bands)[ind2])
+
+        # isonames input, match catnames to them
+        else:
+            catnames = []
+            for n in isonames:
+                if n.lower() in catnames:
+                    ind, = np.where(n.lower()==cnames)
+                    catnames.append(cat.colnames[ind[0]])
+            if len(catnames)==0:
+                catnames = None                    
+
+    # No isochrone names, try match them with catnames
+    if isonames is None and catnames is not None:
+        ind1,ind2 = dln.match(np.char.array(catnames).lower(),gnames)
+        nmatch = len(ind1)
+        if nmatch!=len(catnames):
+            raise ValueError('Not all catnames matched to isochrone band names')
+        if nmatch>0:
+            isonames = list(np.array(grid.bands)[ind2])
+        
+    # Check for error columns
+    if catnames is not None and caterrnames is None:
+        caterrnames = []
+        for n in catnames:
+            if n.lower()+'_err' in cnames:
+                ind, = np.where(n.lower()+'_err'==cnames)
+                caterrnames.append(cat.colnames[ind[0]])                
+        if len(caterrnames)==0:
+            caterrnames = None
+
+    return catnames,caterrnames,isonames
+    
+            
 def isophotprep(iso,names):
     """ Get the isochrone photometry."""
     
@@ -118,7 +166,7 @@ def printpars(pars,parerr=None):
 
 def gridsearch(cat,catnames,grid,isonames,caterrnames=None,
                ages=None,metals=None,extinctions=None,distmod=None,
-               fixed=None,extdict=None):
+               fixed=None,extdict=None,verbose=False):
     """
     Grid search.
 
@@ -148,6 +196,8 @@ def gridsearch(cat,catnames,grid,isonames,caterrnames=None,
     extdict : dict, optional
        Dictionary of extinction coefficients to use. (A_lambda/A_V).  The column
          names must match the isochrone column names.
+    verbose : bool, optional
+         Verbose output of the various steps.  This is False by default.       
 
     Returns
     -------
@@ -232,9 +282,8 @@ def gridsearch(cat,catnames,grid,isonames,caterrnames=None,
                     meddist[i,j,k,l] = meddist1                    
                     chisq[i,j,k,l] = chisq1
 
-                    print(i,j,k,l,sumdist1,chisq1)
-                    
-                    #import pdb; pdb.set_trace()
+                    if verbose:
+                        print(i,j,k,l,sumdist1,chisq1)
                     
                     # keep track of the smallest distance for each star
                     # if a star never has a good match, then maybe have an option
@@ -1066,7 +1115,7 @@ def cmdfigure(figfile,cat,catnames,iso,isonames,out,annotlabels=None,figsize=10,
     if verbose is True: print('Figure saved to '+figfile)
     
     
-def fit(cat,catnames,isonames,grid=None,caterrnames=None,
+def fit(cat,catnames=None,isonames=None,grid=None,caterrnames=None,
         ages=None,metals=None,extinctions=None,distmod=None,initpar=None,
         fixed=None,extdict=None,msteps=100,cornername=None,figfile=None,
         mcmc=False,reject=False,nsigrej=3.0,verbose=False):
@@ -1140,6 +1189,19 @@ def fit(cat,catnames,isonames,grid=None,caterrnames=None,
     # don't necessarily have to input the catnames and isonames if you give the catalog column names the
     # same names as the isochrone names.  Can then match them automatically.
 
+    # Automatically detect photometric bands
+    if isonames is None or catnames is None:
+        catnames,caterrnames,isonames = autodetectnames(cat,grid,catnames=catnames,
+                                                        caterrnames=caterrnames,isonames=isonames)
+
+    # Check names
+    if catnames is None:
+        raise ValueError('Need catnames')    
+    if isonames is None:
+        raise ValueError('Need isonames')
+    if len(catnames)!=len(isonames):
+        raise ValueError('Length of catnames and isonames are not equal')
+        
     if verbose:
         print('Fitting isochrones to catalog of '+str(len(cat))+' sources')
         print('Photometry columns: '+', '.join(catnames))
