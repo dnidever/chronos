@@ -14,6 +14,7 @@ from glob import glob
 from astropy.wcs import WCS
 from astropy.io import fits
 from astropy.table import Table
+import scipy
 from scipy.spatial import cKDTree
 import emcee
 import corner
@@ -29,7 +30,17 @@ def gridparams(ages,metals):
         for m in metals:
             yield (a,m)
 
-def photprep(cat,names,iso=False,errnames=None,verbose=False):
+def isophotprep(iso,names):
+    """ Get the isochrone photometry."""
+    
+    # Put observed photometry in 2D array
+    isophot = []
+    for n in names:
+        isophot.append(iso.data[n])
+    isophot = np.vstack(tuple(isophot)).T    
+    return isophot
+            
+def photprep(cat,names,errnames=None,verbose=False):
 
     ncat = len(cat)
     
@@ -38,8 +49,6 @@ def photprep(cat,names,iso=False,errnames=None,verbose=False):
     for n in names:
         cphot.append(cat[n])
     cphot = np.vstack(tuple(cphot)).T    
-
-    if iso: return cphot
     
     # Uncertainties
     if errnames is not None:
@@ -86,6 +95,9 @@ def isocomparison(cphot,isophot,cphoterr=None):
         chisq = np.sum(dist**2/cphoterr**2)
     else:
         chisq = np.sum(dist**2)        
+
+    # Likelihood
+    
         
     return sumdist,meddist,chisq,dist
 
@@ -236,9 +248,11 @@ def gridsearch(cat,catnames,grid,isonames,caterrnames=None,
 
     return bestvals,bestchisq
 
-def outlier_rejection(cat,catnames,iso,isonames,errnames=None,nsig=3):
+def outlier_rejection(cat,catnames,iso,isonames,errnames=None,nsig=3,verbose=False):
     """ Reject outliers using the best-fit isochrone."""
 
+    ncat = len(cat)
+    
     # Put observed photometry in 2D array
     cphot,cphoterr = photprep(cat,catnames,errnames=errnames)
 
@@ -256,7 +270,11 @@ def outlier_rejection(cat,catnames,iso,isonames,errnames=None,nsig=3):
     sigreldist = dln.mad(reldist)
     #good, = np.where(dist<=nsig*sigdist)
     good, = np.where(reldist<=nsig*sigreldist)    
-
+    nrem = ncat-len(good)
+    
+    if verbose:
+        print('Removed '+str(nrem)+' outlier points from original catalog of '+str(ncat)+' sources')
+    
     return cat[good]
     
 
@@ -382,63 +400,333 @@ def emcee_lnprob(theta, x, y, yerr, grid, isonames, fixpars, fixparvals):
         return -np.inf
     return lp + emcee_lnlike(theta, x, y, yerr, grid, isonames, fixpars, fixparvals)
 
-def jaciso(x,pars,names=None,cphot=None,cphoterr=None,grid=None,isonames=None,
-           fixpars=None,fixparvals=None):
-    """ Calculate jacobian for Isochrone fits."""
+def objectiveiso(theta, y, yerr, grid, isonames, fixpars, fixparvals):
 
+    # Get all 4 parameters
+    pars = allpars(theta,fixpars,fixparvals)
+
+    print('objectiveiso: ',pars)
+    
+    iso = grid(pars[0],pars[1],pars[2],pars[3],names=isonames)
+
+    # Get isochrone photometry array
+    isophot = isophotprep(iso,isonames)
+                    
+    # Do the comparison
+    sumdist1,meddist1,chisq1,dist1 = isocomparison(y,isophot,yerr)
+
+    return 0.5*chisq1
+
+
+def funiso(theta,cphot,cphoterr,grid,isonames,fixpars,fixparvals,verbose=False):
+    """ Return the function and gradient."""
+
+    pars = allpars(theta,fixpars,fixparvals)
+    
     ncat = len(cphoterr)
     nfreepars = np.sum(~fixpars)
-    jac = np.zeros((ncat,nfreepars),float)
+    grad = np.zeros(nfreepars,float)    
     pcount = 0
+
+    if verbose:
+        print('funiso: ',pars)
     
     # Original model
     iso0 = grid(*pars)
-    isophot0 = photprep(iso0,isonames,iso=True)
+    isophot0 = isophotprep(iso0,isonames)
     sumdist0,meddist0,chisq0,dist0 = isocomparison(cphot,isophot0,cphoterr)
+    lnlike0 = 0.5*chisq0
+
+    # Bad input parameter values
+    if (pars[0]<grid.minage or pars[0]>grid.maxage) or (pars[1]<grid.minmetal or pars[1]>grid.maxmetal) or \
+       (pars[2]<0):
+        return np.inf, np.array(4,float)
+    
     
     # Derivative in age
     if fixpars[0]==False:
         pars1 = np.array(pars).copy()
-        pars1[0] += 0.01*pars[0]
+        step = 0.05*pars[0]
+        if pars1[0]+step>grid.maxage:
+            step -= step     
+        pars1[0] += step
         iso1 = grid(*pars1)
-        isophot1 = photprep(iso1,isonames,iso=True)
+        isophot1 = isophotprep(iso1,isonames)
         sumdist1,meddist1,chisq1,dist1 = isocomparison(cphot,isophot1,cphoterr)
-        jac[:,pcount] = dist1-dist0
+        lnlike1 = 0.5*chisq1        
+        grad[pcount] = (lnlike1-lnlike0)/step
         pcount += 1
         
     # Derivative in metallicity
     if fixpars[1]==False:
         pars2 = np.array(pars).copy()
-        pars2[0] += 0.02
+        step = 0.05
+        if pars2[1]+step>grid.maxmetal:
+            step -= step     
+        pars2[1] += step
         iso2 = grid(*pars2)
-        isophot2 = photprep(iso2,isonames,iso=True)
+        isophot2 = isophotprep(iso2,isonames)
         sumdist2,meddist2,chisq2,dist2 = isocomparison(cphot,isophot2,cphoterr)
-        jac[:,pcount] = dist2-dist0
+        lnlike2 = 0.5*chisq2
+        grad[pcount] = (lnlike2-lnlike0)/step        
         pcount += 1
         
     # Derivative in extinction
     if fixpars[2]==False:
         iso3 = iso0.copy()
-        iso3.ext += 0.02
-        isophot3 = photprep(iso3,isonames,iso=True)
+        step = 0.05
+        iso3.ext += step
+        isophot3 = isophotprep(iso3,isonames)
         sumdist3,meddist3,chisq3,dist3 = isocomparison(cphot,isophot3,cphoterr)
-        jac[:,pcount] = dist3-dist0
+        lnlike3 = 0.5*chisq3
+        #jac[:,pcount] = dist3-dist0
+        #jac[:,pcount] = (sumdist3-sumdist0)/step
+        grad[pcount] = (lnlike3-lnlike0)/step        
         pcount += 1
     
     # Derivative in distmod
     if fixpars[3]==False:
         iso4 = iso0.copy()
-        iso4.distmod += 0.2
-        isophot4 = photprep(iso1,isonames,iso=True)
+        step = 0.05
+        iso4.distmod += step
+        isophot4 = isophotprep(iso4,isonames)
         sumdist4,meddist4,chisq4,dist4 = isocomparison(cphot,isophot4,cphoterr)
-        jac[:,pcount] = dist4-dist0
+        lnlike4 = 0.5*chisq4        
+        #jac[:,pcount] = dist4-dist0
+        #jac[:,pcount] = (sumdist4-sumdist0)/step
+        grad[pcount] = (lnlike4-lnlike0)/step        
+        pcount += 1
+        
+    return lnlike0,grad
+
+
+def gradiso(theta,cphot,cphoterr,grid,isonames,fixpars,fixparvals):
+    """ Calculate gradient for Isochrone fits."""
+
+    pars = allpars(theta,fixpars,fixparvals)
+    
+    ncat = len(cphoterr)
+    nfreepars = np.sum(~fixpars)
+    grad = np.zeros(nfreepars,float)    
+    pcount = 0
+
+    print('gradiso: ',pars)
+    
+    # Original model
+    iso0 = grid(*pars)
+    isophot0 = isophotprep(iso0,isonames)
+    sumdist0,meddist0,chisq0,dist0 = isocomparison(cphot,isophot0,cphoterr)
+    lnlike0 = -0.5*chisq0
+    
+    # Derivative in age
+    if fixpars[0]==False:
+        pars1 = np.array(pars).copy()
+        step = 0.05*pars[0]
+        if pars1[0]+step>grid.maxage:
+            step -= step        
+        pars1[0] += step
+        iso1 = grid(*pars1)
+        isophot1 = isophotprep(iso1,isonames)
+        sumdist1,meddist1,chisq1,dist1 = isocomparison(cphot,isophot1,cphoterr)
+        lnlike1 = -0.5*chisq1        
+        #jac[:,pcount] = dist1-dist0
+        #jac[:,pcount] = (sumdist1-sumdist0)/step
+        grad[pcount] = (lnlike1-lnlike0)/step
+        pcount += 1
+        
+    # Derivative in metallicity
+    if fixpars[1]==False:
+        pars2 = np.array(pars).copy()
+        step = 0.05
+        if pars2[1]+step>grid.maxmetal:
+            step -= step
+        pars2[1] += step
+        iso2 = grid(*pars2)
+        isophot2 = isophotprep(iso2,isonames)
+        sumdist2,meddist2,chisq2,dist2 = isocomparison(cphot,isophot2,cphoterr)
+        lnlike2 = -0.5*chisq2
+        #jac[:,pcount] = dist2-dist0
+        #jac[:,pcount] = (sumdist2-sumdist0)/step
+        grad[pcount] = (lnlike2-lnlike0)/step        
+        pcount += 1
+        
+    # Derivative in extinction
+    if fixpars[2]==False:
+        iso3 = iso0.copy()
+        step = 0.05
+        iso3.ext += step
+        isophot3 = isophotprep(iso3,isonames)
+        sumdist3,meddist3,chisq3,dist3 = isocomparison(cphot,isophot3,cphoterr)
+        lnlike3 = -0.5*chisq3
+        #jac[:,pcount] = dist3-dist0
+        #jac[:,pcount] = (sumdist3-sumdist0)/step
+        grad[pcount] = (lnlike3-lnlike0)/step        
         pcount += 1
     
-    return dist0,jac,chisq0
+    # Derivative in distmod
+    if fixpars[3]==False:
+        iso4 = iso0.copy()
+        step = 0.05
+        iso4.distmod += step
+        isophot4 = isophotprep(iso1,isonames)
+        sumdist4,meddist4,chisq4,dist4 = isocomparison(cphot,isophot4,cphoterr)
+        lnlike4 = -0.5*chisq4        
+        #jac[:,pcount] = dist4-dist0
+        #jac[:,pcount] = (sumdist4-sumdist0)/step
+        grad[pcount] = (lnlike4-lnlike0)/step        
+        pcount += 1
+        
+    return -grad
+
+def hessiso(theta,cphot,cphoterr,grid,isonames,fixpars,fixparvals,diag=False):
+    """ Calculate hessian matrix, second derivaties wrt parameters."""
+
+    pars = allpars(theta,fixpars,fixparvals)
+    
+    ncat = len(cphoterr)
+    nfreepars = np.sum(~fixpars)
+    freeparsind, = np.where(fixpars==False)
+    hess = np.zeros((nfreepars,nfreepars),float)    
 
 
-def fit_lsq(cat,catnames,grid,isonames,initpar,caterrnames=None,fixed=None):
-    """ Isochrone fit with least-squares routines."""
+    # Original model
+    iso0 = grid(*pars)
+    isophot0 = isophotprep(iso0,isonames)
+    sumdist0,meddist0,chisq0,dist0 = isocomparison(cphot,isophot0,cphoterr)
+    lnlike0 = 0.5*chisq0
+
+    steps = [0.05*pars[0],0.05,0.05,0.05]
+    
+    # Loop over all free parameters
+    for i in range(nfreepars):
+        ipar = freeparsind[i]
+        istep = steps[ipar]
+        # Make sure steps don't go beyond boundaries
+        if ipar==0 and (pars[0]+2*istep)>grid.maxage:
+            istep = -istep
+        if ipar==1 and (pars[1]+2*istep)>grid.maxmetal:
+            istep = -istep
+        # Second loop
+        for j in np.arange(0,i+1):
+            jpar = freeparsind[j]
+            jstep = steps[ipar]
+            # Make sure steps don't go beyond boundaries
+            if jpar==0 and (pars[0]+2*jstep)>grid.maxage:
+                jstep = -jstep
+            if jpar==1 and (pars[1]+2*jstep)>grid.maxmetal:
+                jstep = -jstep
+            
+            # Calculate the second derivative wrt i and j
+
+            # Second derivative of same parameter
+            #   Derivative one step forward and two steps forward
+            #   then take the derivative of these two derivatives            
+            if i==j:
+                # First first-derivative
+                pars1 = pars.copy()
+                pars1[ipar] += istep
+                if ipar<2:
+                    iso1 = grid(*pars1)
+                elif ipar==2:
+                    iso1 = iso0.copy()
+                    iso1.ext += istep
+                elif ipar==3:
+                    iso1 = iso0.copy()
+                    iso1.distmod += istep                    
+                isophot1 = isophotprep(iso1,isonames)                    
+                sumdist1,meddist1,chisq1,dist1 = isocomparison(cphot,isophot1,cphoterr)                    
+                lnlike1 = 0.5*chisq1
+                deriv1 = (lnlike1-lnlike0)/istep
+                # Second first-derivative
+                pars2 = pars.copy()
+                pars2[ipar] += 2*istep
+                if ipar<2:
+                    iso2 = grid(*pars2)
+                elif ipar==2:
+                    iso2 = iso0.copy()
+                    iso2.ext += 2*istep
+                elif ipar==3:
+                    iso2 = iso0.copy()
+                    iso2.distmod += 2*istep                    
+                isophot2 = isophotprep(iso2,isonames)                    
+                sumdist2,meddist2,chisq2,dist2 = isocomparison(cphot,isophot2,cphoterr)                    
+                lnlike2 = 0.5*chisq2
+                deriv2 = (lnlike2-lnlike1)/istep
+                # Second derivative
+                deriv2nd = (deriv2-deriv1)/istep
+                hess[i,j] = deriv2nd
+
+            # Two different parameters
+            #   Derivative in i at current position
+            #   Derivative in i at current position plus one step in j
+            #   take derivate of these two derivatives
+            else:
+                # Only want diagonal elements
+                if diag:
+                    continue
+                
+                # First first-derivative
+                # derivative in i at current j position
+                pars1 = pars.copy()
+                pars1[ipar] += istep
+                if ipar<2:
+                    iso1 = grid(*pars1)
+                elif ipar==2:
+                    iso1 = iso0.copy()
+                    iso1.ext += istep
+                elif ipar==3:
+                    iso1 = iso0.copy()
+                    iso1.distmod += istep                    
+                isophot1 = isophotprep(iso1,isonames)                    
+                sumdist1,meddist1,chisq1,dist1 = isocomparison(cphot,isophot1,cphoterr)                    
+                lnlike1 = 0.5*chisq1
+                deriv1 = (lnlike1-lnlike0)/istep
+                # Second first-derivative
+                # derivatve in i at current position plus one step in j
+                
+                # Likelihood at current position plust one step in j
+                pars2 = pars.copy()
+                pars2[jpar] += jstep
+                if jpar<2:
+                    iso2 = grid(*pars2)
+                elif jpar==2:
+                    iso2 = iso0.copy()
+                    iso2.ext += jstep
+                elif jpar==3:
+                    iso2 = iso0.copy()
+                    iso2.distmod += jstep                       
+                isophot2 = isophotprep(iso2,isonames)                    
+                sumdist2,meddist2,chisq2,dist2 = isocomparison(cphot,isophot2,cphoterr)                    
+                lnlike2 = 0.5*chisq2
+                # Likelihood at current position plus one step in i and j
+                pars3 = pars.copy()
+                pars3[ipar] += istep
+                pars3[jpar] += jstep
+                if ipar>=2 and jpar>=2:
+                    if ipar==2:
+                        iso3.ext += istep
+                    elif ipar==3:
+                        iso3.distmod += istep
+                    if jpar==2:
+                        iso3.ext += jstep
+                    elif jpar==3:
+                        iso3.distmod += jstep
+                else:
+                    iso3 = grid(*pars3)                        
+                isophot3 = isophotprep(iso3,isonames)                    
+                sumdist3,meddist3,chisq3,dist3 = isocomparison(cphot,isophot3,cphoterr)                    
+                lnlike3 = 0.5*chisq3                
+                deriv2 = (lnlike3-lnlike2)/istep
+                # Second derivative
+                deriv2nd = (deriv2-deriv1)/jstep
+                hess[i,j] = deriv2nd
+                hess[j,i] = deriv2nd                
+
+    return hess
+        
+        
+def fit_mle(cat,catnames,grid,isonames,initpar,caterrnames=None,fixed=None,verbose=False):
+    """ Isochrone fitting using maximum likelihood estimation (MLE)."""
     
     ncat = len(cat)
 
@@ -468,52 +756,66 @@ def fit_lsq(cat,catnames,grid,isonames,initpar,caterrnames=None,fixed=None):
                 fixpars[4] = True
     nfixpars = np.sum(fixpars)
     nfreepars = np.sum(~fixpars)
+    freeparsind, = np.where(fixpars==False)
 
-    # Iterate
-    niter = 0
-    maxpercdiff = 1e10
-    bestpar = initpar.copy()
-    npars = len(bestpar)
-    x = np.arange(ncat)
-    method = 'svd'
-    while (niter<maxiter and maxpercdiff>minpercdiff):
-        start0 = time.time()
+    if nfixpars>0:
+        fixparsind, = np.where(fixpars==True)        
+        fixparvals = np.zeros(nfixpars,float)
+        fixparvals[:] = np.array(initpar)[fixparsind]
+        initpar = np.delete(initpar,fixparsind)
+    else:
+        fixparvals = []
 
-        # Get the Jacobian and model
-        #  only for pixels that are affected by the "free" parameters
-        resid,jac,chisq = jaciso(x,bestpar,names=catnames,cphot=cphot,cphoterr=cphoterr,grid=grid,
-                                 isonames=isonames,fixpars=fixpars,fixparvals=initpar):
-        # Weights
-        wt = 1/cphoterr**2
-        # Solve Jacobian
-        dbeta = lsq.jac_solve(jac,resid,method=method,weight=wt)
-                
-        # Update parameters
-        oldpar = bestpar.copy()
-        bestpar += dbeta
-        # Check differences and changes
-        diff = np.abs(bestpar-oldpar)
-        percdiff = diff/oldpar*100        
-        maxpercdiff = np.max(percdiff)
+    # Bounds
+    lbounds = np.zeros(4,float)
+    lbounds[0] = grid.minage
+    lbounds[1] = grid.minmetal
+    lbounds[2] = 0.0
+    lbounds[3] = -np.inf # None
+    ubounds = np.zeros(4,float)
+    ubounds[0] = grid.maxage
+    ubounds[1] = grid.maxmetal
+    ubounds[2] = np.inf  # None
+    ubounds[3] = np.inf  # None
+    if nfixpars>0:
+        lbounds = np.delete(lbounds,fixparsind)
+        ubounds = np.delete(ubounds,fixparsind)        
+    bounds = list(zip(lbounds,ubounds))
+        
+    
+    # Use scipy.optimize.minimize
+    res = scipy.optimize.minimize(funiso,initpar,jac=True,method='L-BFGS-B',options={'ftol':2e-3,'gtol': 2e-3,'maxiter':50},
+                                  args=(cphot,cphoterr,grid,isonames,fixpars,fixparvals),bounds=bounds)    
+    theta = res.x
+    pars = allpars(theta,fixpars,fixparvals)
 
-        ## Get model and chisq
-        #bestmodel = model(xdata,*pars,allparams=True)
-        #resid = imflatten-bestmodel
-        #chisq = np.sum(resid**2/gf.errflatten**2)
-              
-        #if verbose:
-        #    print('Iter = ',gf.niter)
-        #    print('Pars = ',gf.pars)
-        #    print('Percent diff = ',percdiff)
-        #    print('Diff = ',diff)
-        #    print('chisq = ',chisq)
-                
-        print('iter dt = ',time.time()-start0)
+    # Best model
+    iso = grid(*pars)
+    isophot = isophotprep(iso,isonames)
+    sumdist,meddist,chisq,dist = isocomparison(cphot,isophot,cphoterr)
 
-        niter += 1     # increment counter
+    # Variance of an ML estimator is the inverse of the Fisher information matrix
+    # http://www.sherrytowers.com/mle_introduction.pdf, pg. 7+8
+    # https://stats.stackexchange.com/questions/68080/basic-question-about-fisher-information-matrix-and-relationship-to-hessian-and-s
+    # var = [I]^-1    (means 1/[I])
+    # information matrix is negative of expectation value of Hessian matrix
+    # [I] = -E[H]
+    # Hessian matrix is the matrix of second derivatives of the likelihood
+    # with respect to the parameters
+    # Therefore,
+    # var = (-E[H])^-1
+    # Standard errors of the estimators are the sqrt() of the diagnoal terms
+    # in the variance-covariance matrix.
+    hess = hessiso(theta,cphot,cphoterr,grid,isonames,fixpars,fixparvals,diag=True)
+    thetaerr = np.sqrt(1/np.diag(hess))
+    parerr = np.zeros(4,float)
+    parerr[freeparsind] = thetaerr
 
+    if verbose:
+        printpars(pars,parerr) 
+    
+    return pars,parerr,chisq
 
-    return pars
 
 def fit_mcmc(cat,catnames,grid,isonames,caterrnames=None,initpar=None,
              fixed=None,steps=100,extdict=None,cornername=None,verbose=False):
@@ -767,7 +1069,7 @@ def cmdfigure(figfile,cat,catnames,iso,isonames,out,annotlabels=None,figsize=10,
 def fit(cat,catnames,isonames,grid=None,caterrnames=None,
         ages=None,metals=None,extinctions=None,distmod=None,initpar=None,
         fixed=None,extdict=None,msteps=100,cornername=None,figfile=None,
-        reject=False,nsigrej=3.0,verbose=False):
+        mcmc=False,reject=False,nsigrej=3.0,verbose=False):
     """
     Automated isochrone fitting to photometric data.
 
@@ -799,6 +1101,8 @@ def fit(cat,catnames,isonames,grid=None,caterrnames=None,
     extdict : dict, optional
        Dictionary of extinction coefficients to use. (A_lambda/A_V).  The column
          names must match the isochrone column names.
+    mcmc : bool, optional
+       Run MCMC for better uncertainty estimation.  Default is False.
     reject : bool, optional
        Reject outliers.  Default is False.
     nsigrej : float, optional
@@ -833,6 +1137,9 @@ def fit(cat,catnames,isonames,grid=None,caterrnames=None,
     if extdict is None:
         extdict = extinction.load()
 
+    # don't necessarily have to input the catnames and isonames if you give the catalog column names the
+    # same names as the isochrone names.  Can then match them automatically.
+        
 
     # NEED TO HAVE FINER SAMPLING OF ISOCHRONE!!!
     # If the age+metallicity are fixed, then you don't need to interpolate at all!  Just use single isochrone.
@@ -848,50 +1155,65 @@ def fit(cat,catnames,isonames,grid=None,caterrnames=None,
     else:
         bestval = initpar
 
-    lsqpars,lsqchisq = fit_lsq(cat,catnames,grid,isonames,bestval,caterrnames=caterrnames,fixed=fixed)
-        
+    # Maximum likelihood estimation
+    print('Performing maximum likelihood estimation')
+    lsqpars,lsqparerror,lsqchisq = fit_mle(cat,catnames,grid,isonames,bestval,caterrnames=caterrnames,
+                                           fixed=fixed,verbose=verbose)
+
     # Outlier rejection
     if reject:
         bestiso = grid(bestval[0],bestval[1],bestval[2],bestval[3])
         newcat = outlier_rejection(cat,catnames,bestiso,isonames,
-                                   errnames=caterrnames,nsig=nsigrej)
+                                   errnames=caterrnames,nsig=nsigrej,
+                                   verbose=verbose)
         orig = cat.copy()
         cat = newcat
 
-    # Need a least-squares-like optimization routine here!
-    # use my lsq functions to do this
-    # try computing the jacobian with distance, but that might not work
-    # can do it by using median(distance) as a single "pixel"
-    # add my prometheus leastsquares.py module to dlnpyutils
-    
-    # Run MCMC now
-    if verbose: print('Running MCMC')
-    mcout,mciso = fit_mcmc(cat,catnames,grid,isonames,caterrnames=caterrnames,
-                           initpar=bestval,fixed=fixed,extdict=extdict,steps=msteps,
-                           cornername=cornername)
+        lsqpars1 = lsqpars.copy()
+        lsqparerror1 = lsqparerror.copy()
+        lsqchisq1 = lsqchisq
+        
+        print('Performing maximum likelihood estimation again')
+        lsqpars,lsqparerror,lsqchisq = fit_mle(cat,catnames,grid,isonames,lsqpars,caterrnames=caterrnames,
+                                               fixed=fixed,verbose=verbose)
 
+
+    # Run MCMC now
+    if mcmc:
+        if verbose: print('Running MCMC')
+        mcout,mciso = fit_mcmc(cat,catnames,grid,isonames,caterrnames=caterrnames,
+                               initpar=bestval,fixed=fixed,extdict=extdict,steps=msteps,
+                               cornername=cornername,verbose=verbose)
+        fpars = mcout['pars_ml'][0]
+        fparerror = mcout['parerr'][0]
+        fchisq = mcout['chisq']
+    else:
+        fpars = lsqpars
+        fparerror = lsqparerror
+        fchisq = lsqchisq
+    bestiso = grid(*fpars)
     
     if verbose is True:
         print('Final parameters:')
-        printpars(mcout['pars_ml'],mcout['parerr'])
-        print('chisq = %5.2f' % mcout['chisq'])
+        printpars(fpars,fparerror)
+        print('chisq = %5.2f' % fchisq)
     dtype = np.dtype([('age',np.float32),('ageerr',np.float32),('metal',np.float32),('metalerr',np.float32),
                       ('ext',np.float32),('exterr',np.float32),('distmod',np.float32),('distmoderr',np.float32),
                       ('distance',np.float32),('chisq',np.float32)])
     out = np.zeros(1,dtype=dtype)
-    out['age'] = mcout['pars_ml'][0][0]
-    out['ageerr'] = mcout['parerr'][0][0]  
-    out['metal'] = mcout['pars_ml'][0][1]
-    out['metalerr'] =   mcout['parerr'][0][1]  
-    out['ext'] = mcout['pars_ml'][0][2]
-    out['exterr'] = mcout['parerr'][0][2]  
-    out['distmod'] = mcout['pars_ml'][0][3]
-    out['distmoderr'] = mcout['parerr'][0][3]  
+    out['age'] = fpars[0]
+    out['ageerr'] = fparerror[0]  
+    out['metal'] = fpars[1]
+    out['metalerr'] = fparerror[1]  
+    out['ext'] = fpars[2]
+    out['exterr'] = fparerror[2]
+    out['distmod'] = fpars[3]
+    out['distmoderr'] = fparerror[3]
     out['distance'] = 10**((out['distmod']+5)/5.)/1e3
-    out['chisq'] = mcout['chisq']
+    out['chisq'] = fchisq
     
     # Make output plot
     if figfile is not None:
-        cmdfigure(figfile,cat,catnames,mciso,isonames,out,verbose=verbose)
-    
-    return out,mciso
+        cmdfigure(figfile,cat,catnames,bestiso,isonames,out,verbose=verbose)
+
+    return out,bestiso

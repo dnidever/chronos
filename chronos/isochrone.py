@@ -387,6 +387,9 @@ class Isochrone:
         out += 'Extinction = %6.3f\n' % self.ext
         out += 'Nbands = %d' % len(self.bands)
         return out 
+
+    def __len__(self):
+        return len(self._data)
     
     @property
     def data(self):
