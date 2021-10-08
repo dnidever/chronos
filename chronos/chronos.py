@@ -1139,8 +1139,19 @@ def fit(cat,catnames,isonames,grid=None,caterrnames=None,
 
     # don't necessarily have to input the catnames and isonames if you give the catalog column names the
     # same names as the isochrone names.  Can then match them automatically.
-        
 
+    if verbose:
+        print('Fitting isochrones to catalog of '+str(len(cat))+' sources')
+        print('Photometry columns: '+', '.join(catnames))
+        if caterrnames is not None:
+            print('Photometric uncertainty columns: '+', '.join(caterrnames))
+        print('Isochrone columns: '+', '.join(isonames))
+
+    if initpar is not None and verbose:
+        print(' ')
+        print('Using initial parameter estimates:')
+        printpars(initpar)
+        
     # NEED TO HAVE FINER SAMPLING OF ISOCHRONE!!!
     # If the age+metallicity are fixed, then you don't need to interpolate at all!  Just use single isochrone.
     # If age or metallicity are fixed, the you could interpolate the grid in that one dimension and
@@ -1148,7 +1159,9 @@ def fit(cat,catnames,isonames,grid=None,caterrnames=None,
         
     # Do a grid search over distance modulues, age, metallicity and extinction
     if initpar is None:
-        if verbose: print('Performing grid search')
+        if verbose:
+            print(' ')
+            print('Performing grid search')
         bestval,chisq = gridsearch(cat,catnames,grid,isonames,caterrnames=caterrnames,
                                    ages=ages,metals=metals,extinctions=extinctions,
                                    distmod=distmod,fixed=fixed,extdict=extdict)
@@ -1156,7 +1169,9 @@ def fit(cat,catnames,isonames,grid=None,caterrnames=None,
         bestval = initpar
 
     # Maximum likelihood estimation
-    print('Performing maximum likelihood estimation')
+    if verbose:
+        print(' ')
+        print('Performing maximum likelihood estimation')
     lsqpars,lsqparerror,lsqchisq = fit_mle(cat,catnames,grid,isonames,bestval,caterrnames=caterrnames,
                                            fixed=fixed,verbose=verbose)
 
@@ -1172,15 +1187,19 @@ def fit(cat,catnames,isonames,grid=None,caterrnames=None,
         lsqpars1 = lsqpars.copy()
         lsqparerror1 = lsqparerror.copy()
         lsqchisq1 = lsqchisq
-        
-        print('Performing maximum likelihood estimation again')
+
+        if verbose:
+            print(' ')
+            print('Performing maximum likelihood estimation again')
         lsqpars,lsqparerror,lsqchisq = fit_mle(cat,catnames,grid,isonames,lsqpars,caterrnames=caterrnames,
                                                fixed=fixed,verbose=verbose)
 
 
     # Run MCMC now
     if mcmc:
-        if verbose: print('Running MCMC')
+        if verbose:
+            print(' ')
+            print('Running MCMC')
         mcout,mciso = fit_mcmc(cat,catnames,grid,isonames,caterrnames=caterrnames,
                                initpar=bestval,fixed=fixed,extdict=extdict,steps=msteps,
                                cornername=cornername,verbose=verbose)
@@ -1194,6 +1213,7 @@ def fit(cat,catnames,isonames,grid=None,caterrnames=None,
     bestiso = grid(*fpars)
     
     if verbose is True:
+        print(' ')
         print('Final parameters:')
         printpars(fpars,fparerror)
         print('chisq = %5.2f' % fchisq)
