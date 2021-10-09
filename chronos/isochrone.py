@@ -130,7 +130,6 @@ def isointerp2(iso1,iso2,frac,photnames=None,minlabel=1,maxlabel=7,verbose=False
     # Label loop
     count = 0
     for l in np.arange(minlabel,maxlabel+1):
-        #print(l)
         lab1 = iso1['LABEL']==l
         nlab1 = np.sum(lab1)
         lab2 = iso2['LABEL']==l
@@ -390,6 +389,20 @@ class Isochrone:
 
     def __len__(self):
         return len(self._data)
+
+    @property
+    def size(self):
+        return len(self._data)
+
+    @property
+    def shape(self):
+        return (len(self._data),)
+    
+    def __setitem__(self,index,data):
+        self._data[index] = data
+    
+    def __getitem__(self,index):
+        return self._data[index]
     
     @property
     def data(self):
@@ -448,10 +461,68 @@ class Isochrone:
         return self._metal
 
     @property
+    def colnames(self):
+        """ Return the isochrone data column names."""
+        return self.data.colnames
+    
+    @property
     def bands(self):
         """ Return the list of bands."""
         return self._bands
 
+    def synth(self,nstars=1000,minlabel=1,maxlabel=8,names=None,minmass=0,maxmass=1000):
+        """ Create synthetic population."""
+    
+        if names is None:
+            names = self.bands
+        
+        # Initialize the output catalog
+        out = Table()
+        out['AGE'] = np.zeros(int(nstars),float)
+        out['METAL'] = 0.0
+        out['MINI'] = 0.0
+        #out['INT_IMF'] = 0.0
+        out['MASS'] = 0.0        
+        out['LABEL'] = 0
+        for n in names:
+            out[n] = 0.0        
+        
+        lab = ((self._data['LABEL']>=minlabel) & (self._data['LABEL']<=maxlabel))
+        data = self._data[lab]
+
+        ## Mass cuts
+        massind, = np.where((data['MINI'] >= minmass) & (data['MINI'] <= maxmass))
+        data = data[massind]
+        ndata = len(data)
+        if ndata==0:
+            raise ValueError('No isochrone points left after mass cut')
+        
+        # PDF, probability distribution function
+        # int_IMF, which is the integral of the IMF under consideration (as selected in the form, in number of stars,
+        # and normalised to a total mass of 1 Msun) from 0 up to the current M_ini. Differences between 2 values of
+        # int_IMF give the absolute number of stars occupying that isochrone section per unit mass of stellar
+        # population initially born, as expected for the selected IMF.
+        pdf = np.maximum(np.diff(data['INT_IMF'].data),1e-8)
+        pdf = np.hstack((0.0, pdf))
+        
+        # Create normalized index array (from 0-1)
+        indx = np.arange(ndata).astype(float)/(ndata-1)
+        # Create cumulative distribution function
+        cdf = np.cumsum(pdf)
+        cdf /= np.max(cdf)
+
+        # Get the indices in the structure from the CDF
+        #interp,cdf,indx,randomu(seed,nstars),newindx
+        newindx = interp1d(cdf,indx)(np.random.rand(int(nstars)))
+        
+        # Interpolate all of the relevant columns
+        for n in out.colnames:
+            if n != 'INT_IMF':
+                newval = interp1d(indx,data[n])(newindx)
+                out[n] = newval
+
+        return out
+            
     @classmethod
     def read(cls,filename):
         """ Read in an isochrone file."""
@@ -501,9 +572,11 @@ class IsoGrid:
     def __init__(self,iso,extdict=None):
         uages = np.unique(iso['AGE'].data)
         self._ages = uages
+        self._nages = len(uages)
         self._agerange = [np.min(uages),np.max(uages)]
         umetals = np.unique(iso['METAL'].data)
         self._metals = umetals
+        self._nmetals = len(umetals)
         self._metalrange = [np.min(umetals),np.max(umetals)]
         self._index = []
         self._data = iso
@@ -512,7 +585,7 @@ class IsoGrid:
         colnames = np.char.array(iso.colnames)
         photind, = np.where((colnames.find('MAG')>-1) & (colnames.find('_')>-1))
         photnames = list(colnames[photind])
-        self.bands = photnames
+        self._bands = photnames
         
         # Create the index
         index = []
@@ -551,7 +624,40 @@ class IsoGrid:
         s += '%6.2f < Metal < %6.2f\n' % (self.minmetal,self.maxmetal)
         s += str(len(self.bands))+' bands: '+', '.join(self.bands)
         return s
+
+    def __len__(self):
+        """ Return the number of isochrones in the grid."""
+        return self._nages*self._nmetals
+
+    @property
+    def size(self):
+        """ Return the number of isochrones in the grid."""
+        return self._nages*self._nmetals
+    
+    @property
+    def shape(self):
+        """ Return the grid shape."""
+        return (self._nages,self._nmetals)
+
+    def __getitem__(self, item):
+        """ Get single isochrones with indexing or slicing."""
+
+        # Single slice or integer
+        #   make sure we have values for each dimension        
+        if type(item) is not tuple:
+            item = (item,0)
+        if type(item[0]) is not int or type(item[1]) is not int:
+            raise ValueError('Currently only single indexing is supported.  No slicing.')
+
+        if item[0]>self._nages-1:
+            raise IndexError('index '+str(item[0])+' is out of bounds for axis 0 with size '+str(self._nages))
+        if item[1]>self._nmetals-1:
+            raise IndexError('index '+str(item[1])+' is out of bounds for axis 1 with size '+str(self._nmetals))
         
+        age = self.ages[item[0]]
+        metal = self.metals[item[1]]
+        return self(age,metal)
+            
     def __call__(self,age,metal,ext=None,distmod=None,names=None,system=None,
                  closest=False,verbose=False):
         """ Return the isochrone for this age and metallicity."""
@@ -647,6 +753,15 @@ class IsoGrid:
                 
         return outiso
 
+    @property
+    def bands(self):
+        """ Return the list of bands."""
+        return self._bands
+    
+    @property
+    def colnames(self):
+        """ Return the isochrone data column names."""
+        return self._data.colnames    
             
     @property
     def ages(self):
@@ -749,3 +864,6 @@ class IsoGrid:
     def copy(self):
         """ Return a copy of self."""
         return copy.deepcopy(self)
+
+    #def write(self):
+    #  write to file and keep index as well

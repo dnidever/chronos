@@ -442,7 +442,7 @@ def emcee_lnprob(theta, x, y, yerr, grid, isonames, fixpars, fixparvals):
          log likelihood.
 
     """
-    print(theta)
+    #print(theta)
     pars = allpars(theta,fixpars,fixparvals)
     lp = emcee_lnprior(pars,grid)
     if not np.isfinite(lp):
