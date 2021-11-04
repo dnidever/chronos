@@ -4,6 +4,7 @@
 from setuptools import setup, find_packages
 
 setup(name='chronos',
+#setup(name='thechronos',
       version='1.0.0',
       description='Automatic isochrone fitting to photometric data',
       author='David Nidever',
@@ -11,6 +12,6 @@ setup(name='chronos',
       url='https://github.com/dnidever/chronos',
       packages=find_packages(exclude=["tests"]),
 #      scripts=['bin/dopfit','bin/dopjointfit','bin/doppler'],
-      requires=['numpy','astropy(>=4.0)','scipy','dlnpyutils'],
+      requires=['numpy','astropy(>=4.0)','scipy','dlnpyutils','emcee','cornner'],
       include_package_data=True,
 )
