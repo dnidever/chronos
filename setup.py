@@ -3,8 +3,9 @@
 #from distutils.core import setup
 from setuptools import setup, find_packages
 
+pypiname = 'thechronos'
+
 setup(name='chronos',
-#setup(name='thechronos',
       version='1.0.1',
       description='Automatic isochrone fitting to photometric data',
       author='David Nidever',
