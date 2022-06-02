@@ -113,7 +113,7 @@ def isointerp2(iso1,iso2,frac,photnames=None,minlabel=1,maxlabel=7,verbose=False
         colnames = np.char.array(iso1.colnames)
         photind, = np.where((colnames.find('MAG')>-1) & (colnames.find('_')>-1))
         photnames = list(colnames[photind])
-    interpnames = ['INT_IMF','MASS']+photnames
+    interpnames = ['INT_IMF','MASS','LOGTE','LOGG']+photnames
 
     # Initialize the output catalog
     nout = int(1.5*np.max([niso1,niso2]))
@@ -122,7 +122,9 @@ def isointerp2(iso1,iso2,frac,photnames=None,minlabel=1,maxlabel=7,verbose=False
     out['METAL'] = metal1*(1-frac)+metal2*frac
     out['MINI'] = 0.0
     out['INT_IMF'] = 0.0
-    out['MASS'] = 0.0        
+    out['MASS'] = 0.0
+    out['LOGTE'] = 0.0
+    out['LOGG'] = 0.0            
     out['LABEL'] = 0
     for n in photnames:
         out[n] = 0.0
@@ -490,7 +492,9 @@ class Isochrone:
         out['METAL'] = 0.0
         out['MINI'] = 0.0
         #out['INT_IMF'] = 0.0
-        out['MASS'] = 0.0        
+        out['MASS'] = 0.0
+        out['LOGTE'] = 0.0
+        out['LOGG'] = 0.0                
         out['LABEL'] = 0
         for n in names:
             out[n] = 0.0        
