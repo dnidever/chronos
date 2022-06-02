@@ -1,33 +1,33 @@
-# NAME                    EXTINCTION
-DECAM_UMAG                 1.45951
-DECAM_GMAG                 1.18770
-DECAM_RMAG                 0.82950
-DECAM_IMAG                 0.63501
-DECAM_ZMAG                 0.46428
-DECAM_YMAG                 0.41207
-GAIAEDR3_GMAG              0.83627
-GAIAEDR3_GBPMAG            1.08337
-GAIAEDR3_GRPMAG            0.63439
-JOHNSON_UMAG               1.55814
-JOHNSON_BMAG  	      	   1.32616
-JOHNSON_VMAG  	      	   1.00096
-JOHNSON_RMAG  	      	   0.80815
-JOHNSON_IMAG  	      	   0.59893
-JOHNSON_JMAG               0.28688    	
-JOHNSON_HMAG               0.18103
-JOHNSON_KMAG               0.11265
-SDSS_UMAG                  1.57465
-SDSS_GMAG                  1.22651
-SDSS_RMAG                  0.86639
-SDSS_IMAG                  0.68311
-SDSS_ZMAG                  0.48245
-WASHINGTON_CMAG            1.46301
-WASHINGTON_MMAG            1.10467
-WASHINGTON_T1MAG           0.83083
-WASHINGTON_T2MAG           0.59382
-WASHINGTON_DDO51FINFMAG    1.09447    	
-WASHINGTON_DDO51F79MAG     1.09519    	
-WASHINGTON_DDO51F29MAG     1.09883    	
-TMASS_JMAG                 0.28665
-TMASS_HMAG                 0.18082
-TMASS_KSMAG                0.11675
+# NAME                    EXTINCTION    LAMBDA   LAMBDAWIDTH
+DECAM_UMAG                 1.45951      3876.37     277
+DECAM_GMAG                 1.18770      4841.88	   1138
+DECAM_RMAG                 0.82950      6438.53    1383
+DECAM_IMAG                 0.63501      7821.01    1385
+DECAM_ZMAG                 0.46428      9172.48    1269
+DECAM_YMAG                 0.41207      9877.84     679
+GAIAEDR3_GMAG              0.83627      6390.21    4416
+GAIAEDR3_BPMAG             1.08337      5182.58    2617
+GAIAEDR3_RPMAG             0.63439      7825.08    2863
+JOHNSON_UMAG               1.55814      3598.54     584
+JOHNSON_BMAG  	      	   1.32616      4385.92     913
+JOHNSON_VMAG  	      	   1.00096      5490.56     857
+JOHNSON_RMAG  	      	   0.80815      6594.72    1591
+JOHNSON_IMAG  	      	   0.59893      8059.88    1495
+JOHNSON_JMAG               0.28688     12369.26    2047
+JOHNSON_HMAG               0.18103     16464.45    2854
+JOHNSON_KMAG               0.11265     22105.45    3646
+SDSS_UMAG                  1.57465      3561.79     558
+SDSS_GMAG                  1.22651      4718.87    1158
+SDSS_RMAG                  0.86639      6185.19    1111
+SDSS_IMAG                  0.68311      7499.70    1045
+SDSS_ZMAG                  0.48245      8961.49    1125
+WASHINGTON_CMAG            1.46301      3864.24    1021
+WASHINGTON_MMAG            1.10467      5110.19     945
+WASHINGTON_T1MAG           0.83083      6428.96	    808
+WASHINGTON_T2MAG           0.59382      8094.06    1354
+WASHINGTON_DDO51FINFMAG    1.09447    	5144.60     158
+WASHINGTON_DDO51F79MAG     1.09519    	5142.15     158
+WASHINGTON_DDO51F29MAG     1.09883    	5129.83     158
+TMASS_JMAG                 0.28665      12375.60   1688
+TMASS_HMAG                 0.18082      16476.02   2543
+TMASS_KSMAG                0.11675      21620.75   2714

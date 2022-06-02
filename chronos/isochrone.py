@@ -212,11 +212,18 @@ def isointerp2(iso1,iso2,frac,photnames=None,minlabel=1,maxlabel=7,verbose=False
 
         # Single data point, often for label=9, WD
         else:
-            out['MINI'][count] = iso1['MINI'][lab1]*(1-frac)+iso2['MINI'][lab2]*frac
+            uselab1, = np.where(lab1)
+            uselab2, = np.where(lab2)
+            # take middle point
+            if len(uselab1)==1 and len(uselab2)>1:
+                uselab2 = uselab2[len(uselab2)//2]
+            elif len(uselab2)==1 and len(uselab1)>1:
+                uselab1 = uselab1[len(uselab1)//2]
+            out['MINI'][count] = iso1['MINI'][uselab1]*(1-frac)+iso2['MINI'][uselab2]*frac
             for n in interpnames:
-                out[n][count] = iso1[n][lab1]*(1-frac)+iso2[n][lab2]*frac
+                out[n][count] = iso1[n][uselab1]*(1-frac)+iso2[n][uselab2]*frac
             out['LABEL'][count] = l
-            count += nlab1
+            count += 1
 
         
         #import pdb; pdb.set_trace()
@@ -355,8 +362,9 @@ class Isochrone:
         if extdict is not None:
             self._extdict = extdict
         else:
-            self._extdict = extinction.load()
-        
+            extdict,exttab = extinction.load()
+            self._extdict = extdict
+            self._exttab = exttab
         
     def __call__(self,distmod=None,ext=None,maxlabel=None):
         """ Return an isochrone with a given distance modulus and extinction."""
@@ -613,8 +621,10 @@ class IsoGrid:
         if extdict is not None:
             self._extdict = extdict
         else:
-            self._extdict = extinction.load()
-
+            extdict,exttab = extinction.load()
+            self._extdict = extdict
+            self._exttab = exttab
+            
         
     def __repr__(self):
         """ Print out string representation."""
