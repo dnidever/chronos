@@ -32,7 +32,7 @@ def load(filename=None):
     ext = {}
     for i in range(len(tab)):
         ext[tab['NAME'][i]] = tab['EXTINCTION'][i]
-    return ext
+    return ext,tab
         
 def extinct(iso,ext,isonames=None,extdict=None,dataonly=None,verbose=False):
     """ Apply extinction to the photometry."""
