@@ -480,12 +480,16 @@ class Isochrone:
         """ Return the list of bands."""
         return self._bands
 
-    def synth(self,nstars=1000,minlabel=1,maxlabel=8,names=None,minmass=0,maxmass=1000):
+    def synth(self,nstars=None,totmass=None,minlabel=1,maxlabel=8,names=None,minmass=0,maxmass=1000):
         """ Create synthetic population."""
     
         if names is None:
             names = self.bands
-        
+
+        # By default us 1000 stars
+        if nstars is None and totmass is None:
+            nstars = 1000
+            
         # Initialize the output catalog
         out = Table()
         out['AGE'] = np.zeros(int(nstars),float)
@@ -508,6 +512,11 @@ class Isochrone:
         ndata = len(data)
         if ndata==0:
             raise ValueError('No isochrone points left after mass cut')
+
+        # Total mass input, figure out the number of stars we expect
+        # for our stellar mass range
+        if nstars is None and totmass is not None:
+            nstars = np.ceil((np.max(data['INT_IMF'])-np.min(data['INT_IMF']))*totmass)
         
         # PDF, probability distribution function
         # int_IMF, which is the integral of the IMF under consideration (as selected in the form, in number of stars,
