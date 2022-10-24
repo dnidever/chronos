@@ -489,20 +489,7 @@ class Isochrone:
         # By default us 1000 stars
         if nstars is None and totmass is None:
             nstars = 1000
-            
-        # Initialize the output catalog
-        out = Table()
-        out['AGE'] = np.zeros(int(nstars),float)
-        out['METAL'] = 0.0
-        out['MINI'] = 0.0
-        #out['INT_IMF'] = 0.0
-        out['MASS'] = 0.0
-        out['LOGTE'] = 0.0
-        out['LOGG'] = 0.0                
-        out['LABEL'] = 0
-        for n in names:
-            out[n] = 0.0        
-        
+
         lab = ((self._data['LABEL']>=minlabel) & (self._data['LABEL']<=maxlabel))
         data = self._data[lab]
 
@@ -517,7 +504,20 @@ class Isochrone:
         # for our stellar mass range
         if nstars is None and totmass is not None:
             nstars = np.ceil((np.max(data['INT_IMF'])-np.min(data['INT_IMF']))*totmass)
-        
+            
+        # Initialize the output catalog
+        out = Table()
+        out['AGE'] = np.zeros(int(nstars),float)
+        out['METAL'] = 0.0
+        out['MINI'] = 0.0
+        #out['INT_IMF'] = 0.0
+        out['MASS'] = 0.0
+        out['LOGTE'] = 0.0
+        out['LOGG'] = 0.0                
+        out['LABEL'] = 0
+        for n in names:
+            out[n] = 0.0        
+
         # PDF, probability distribution function
         # int_IMF, which is the integral of the IMF under consideration (as selected in the form, in number of stars,
         # and normalised to a total mass of 1 Msun) from 0 up to the current M_ini. Differences between 2 values of
@@ -698,7 +698,7 @@ class IsoGrid:
             names = list(np.array(self.bands)[nameind])
         if names is None:
             names = self.bands
-        outnames = ['AGE','METAL','MINI','INT_IMF','MASS','LABEL']+names
+        outnames = ['AGE','METAL','MINI','INT_IMF','MASS','LOGTE','LOGG','LABEL']+names
         
         
         # Get the closest isochrone on the grid
