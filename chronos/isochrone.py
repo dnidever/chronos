@@ -615,9 +615,14 @@ class IsoGrid:
         npoints = []
         ind2ind1 = np.zeros((len(uages),len(umetals)),int)
         count = 0
+        ageindex = dln.create_index(iso['AGE'])
         for i,a in enumerate(uages):
-            for j,m in enumerate(umetals):
-                ind, = np.where((iso['AGE']==a) & (iso['METAL']==m))
+            aind = ageindex['index'][ageindex['lo'][i]:ageindex['hi'][i]+1]
+            mindex = dln.create_index(iso[aind]['METAL'])
+            for j,m in enumerate(mindex['value']):
+                mind = mindex['index'][mindex['lo'][j]:mindex['hi'][j]+1]
+                ind = aind[mind]
+                #ind, = np.where((iso['AGE']==a) & (iso['METAL']==m))
                 index.append(ind)
                 allages.append(a)
                 allmetals.append(m)
