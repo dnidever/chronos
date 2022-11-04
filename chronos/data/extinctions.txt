@@ -6,7 +6,9 @@ DECAM_IMAG                 0.63501      7821.01    1385
 DECAM_ZMAG                 0.46428      9172.48    1269
 DECAM_YMAG                 0.41207      9877.84     679
 GAIAEDR3_GMAG              0.83627      6390.21    4416
+GAIAEDR3_GBPMAG            1.08337      5182.58    2617
 GAIAEDR3_BPMAG             1.08337      5182.58    2617
+GAIAEDR3_GRPMAG            0.63439      7825.08    2863
 GAIAEDR3_RPMAG             0.63439      7825.08    2863
 JOHNSON_UMAG               1.55814      3598.54     584
 JOHNSON_BMAG  	      	   1.32616      4385.92     913
