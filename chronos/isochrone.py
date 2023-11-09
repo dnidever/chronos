@@ -350,9 +350,11 @@ class Isochrone:
         self._distmod = 0.0
         self._ext = 0.0
         
-        self._data = iso
+        self._data = copy.deepcopy(iso)
+        # make sure the data are properly sorted by MINI
+        self._data.sort('MINI')
         self.ndata = len(iso)
-        self._origdata = copy.deepcopy(iso)
+        self._origdata = iso
         
         # Photometric bands
         colnames = np.char.array(iso.colnames)
@@ -450,6 +452,7 @@ class Isochrone:
         # Extinct it
         newdata = extinction.extinct(newdata,extin,extdict=self._extdict,isonames=self.bands)
         self._data = newdata
+        self._data.sort('MINI')  # make sure they are sorted right
         # Set the distance modulus
         distm = copy.deepcopy(self._distmod)
         self._distmod = 0.0
@@ -480,11 +483,12 @@ class Isochrone:
         """ Return the list of bands."""
         return self._bands
 
-    def synth(self,nstars=None,totmass=None,minlabel=1,maxlabel=8,names=None,minmass=0,maxmass=1000):
+    def synth(self,nstars=None,totmass=None,minlabel=1,maxlabel=8,bands=None,minmass=0,
+              maxmass=1000,columns=['AGE','METAL','MINI','MASS','LOGTE','LOGG','LABEL']):
         """ Create synthetic population."""
     
-        if names is None:
-            names = self.bands
+        if bands is None:
+            bands = self.bands
 
         # By default us 1000 stars
         if nstars is None and totmass is None:
@@ -508,14 +512,10 @@ class Isochrone:
         # Initialize the output catalog
         out = Table()
         out['AGE'] = np.zeros(int(nstars),float)
-        out['METAL'] = 0.0
-        out['MINI'] = 0.0
-        #out['INT_IMF'] = 0.0
-        out['MASS'] = 0.0
-        out['LOGTE'] = 0.0
-        out['LOGG'] = 0.0                
-        out['LABEL'] = 0
-        for n in names:
+        for c in columns:
+            if c != 'AGE':
+                out[c] = 0.0
+        for n in bands:  # bands to interpolate
             out[n] = 0.0        
 
         # PDF, probability distribution function
@@ -744,7 +744,9 @@ class IsoGrid:
                 outiso.distmod = distmod
             if ext is not None:
                 outiso.ext = ext
-        
+
+            return outiso
+                
         # Exact match exists
         if age in self.ages and metal in self.metals:
             aind, = np.where(self.ages==age)
