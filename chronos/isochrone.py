@@ -125,7 +125,7 @@ def isointerp2(iso1,iso2,frac,photnames=None,minlabel=1,maxlabel=7,verbose=False
     out['MASS'] = 0.0
     out['LOGTE'] = 0.0
     out['LOGG'] = 0.0            
-    out['LABEL'] = 0
+    out['LABEL'] = -1
     for n in photnames:
         out[n] = 0.0
     
@@ -226,12 +226,9 @@ def isointerp2(iso1,iso2,frac,photnames=None,minlabel=1,maxlabel=7,verbose=False
                 out[n][count] = iso1[n][uselab1]*(1-frac)+iso2[n][uselab2]*frac
             out['LABEL'][count] = l
             count += 1
-
-        
-        #import pdb; pdb.set_trace()
         
     # Trim extra elements
-    out = out[out['LABEL']>0]
+    out = out[out['LABEL']>-1]
     
     return out
     
@@ -337,7 +334,7 @@ def isointerp(grid,age,metal,names=None,minlabel=1,maxlabel=7,verbose=False):
 
     # Return an Isochrone object
     iso = Isochrone(iso)
-        
+    
     return iso
 
 
@@ -523,7 +520,7 @@ class Isochrone:
         # and normalised to a total mass of 1 Msun) from 0 up to the current M_ini. Differences between 2 values of
         # int_IMF give the absolute number of stars occupying that isochrone section per unit mass of stellar
         # population initially born, as expected for the selected IMF.
-        pdf = np.maximum(np.diff(data['INT_IMF'].data),1e-8)
+        pdf = np.maximum(np.diff(data['INT_IMF'].data),0.0)   # 1e-8
         pdf = np.hstack((0.0, pdf))
         
         # Create normalized index array (from 0-1)
@@ -542,6 +539,8 @@ class Isochrone:
                 newval = interp1d(indx,data[n])(newindx)
                 out[n] = newval
 
+        import pdb; pdb.set_trace()
+                
         return out
             
     @classmethod
@@ -622,6 +621,7 @@ class IsoGrid:
             for j,m in enumerate(mindex['value']):
                 mind = mindex['index'][mindex['lo'][j]:mindex['hi'][j]+1]
                 ind = aind[mind]
+                ind = ind[np.argsort(ind)]  # MAKE SURE they are SORTED!
                 #ind, = np.where((iso['AGE']==a) & (iso['METAL']==m))
                 index.append(ind)
                 allages.append(a)
@@ -634,7 +634,7 @@ class IsoGrid:
         self._allmetals = np.array(allmetals)
         self._npoints = np.array(npoints)
         self._ind2ind1 = ind2ind1
-
+        
         # Extinction dictionary
         if extdict is not None:
             self._extdict = extdict
@@ -746,8 +746,14 @@ class IsoGrid:
                 outiso.ext = ext
 
             return outiso
-                
+        
         # Exact match exists
+        #   basically within the rounding error
+        #if (np.min(np.abs(self.ages-age)) < 1e5 and
+        #    np.min(np.abs(self.metals-metal)) < 1e-3):
+        #    aind = np.argmin(np.abs(self.ages-age))
+        #    mind = np.argmin(np.abs(self.metals-metal))
+        #    ind1 = self._ind2ind1[aind,mind]
         if age in self.ages and metal in self.metals:
             aind, = np.where(self.ages==age)
             mind, = np.where(self.metals==metal)
