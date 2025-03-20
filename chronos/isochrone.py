@@ -539,8 +539,6 @@ class Isochrone:
                 newval = interp1d(indx,data[n])(newindx)
                 out[n] = newval
 
-        import pdb; pdb.set_trace()
-                
         return out
             
     @classmethod
