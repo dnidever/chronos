@@ -18,21 +18,27 @@ import copy
 from . import extinction,utils
 
 
-def load():
+def load(files=None):
     """ Load all the default isochrone files."""
-    ddir = utils.datadir()
-    files = glob(ddir+'parsec_*fits.gz')
-    nfiles = len(files)
-    if nfiles==0:
-        raise Exception("No default isochrone files found in "+ddir)
+    if files is None:
+        ddir = utils.datadir()
+        files = glob(ddir+'parsec_*fits.gz')
+        files.sort()
+        nfiles = len(files)
+        if nfiles==0:
+            raise Exception("No default isochrone files found in "+ddir)
+    else:
+        files = [files]
     iso = []
     for f in files:
         iso.append(Table.read(f))
     if len(iso)==1: iso=iso[0]
         
     # Change metallicity and age names for parsec
-    iso['AGE'] = 10**iso['LOGAGE'].copy()
-    iso['METAL'] = iso['MH']
+    if 'AGE' not in iso.colnames and 'LOGAGE' in iso.colnames:
+        iso['AGE'] = 10**iso['LOGAGE'].copy()
+    if 'METAL' not in iso.colnames and 'MH' in iso.colnames:
+        iso['METAL'] = iso['MH']
         
     # Index
     grid = IsoGrid(iso)
@@ -588,6 +594,11 @@ class Isochrone:
 class IsoGrid:
 
     def __init__(self,iso,extdict=None):
+        # Change metallicity and age names for parsec
+        if 'AGE' not in iso.colnames and 'LOGAGE' in iso.colnames:
+            iso['AGE'] = 10**iso['LOGAGE'].copy()
+        if 'METAL' not in iso.colnames and 'MH' in iso.colnames:
+            iso['METAL'] = iso['MH']
         uages = np.unique(iso['AGE'].data)
         self._ages = uages
         self._nages = len(uages)
@@ -894,10 +905,15 @@ class IsoGrid:
     def interp(self,age,metal,names=None,minlabel=1,maxlabel=7,verbose=False):
         """ Interpolate in grid for this age and metallicity."""
         return isointerp(self,age,metal,names=names,minlabel=minlabel,maxlabel=maxlabel,verbose=verbose)
-
+    
     def copy(self):
         """ Return a copy of self."""
         return copy.deepcopy(self)
 
+    @classmethod
+    def read(cls,files):
+        """ Read from files """
+        return load(files)
+    
     #def write(self):
     #  write to file and keep index as well
