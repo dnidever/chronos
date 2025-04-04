@@ -22,7 +22,7 @@ def load(files=None):
     """ Load all the default isochrone files."""
     if files is None:
         ddir = utils.datadir()
-        files = glob(ddir+'parsec_*fits.gz')
+        files = glob(ddir+'parsec_grid.fits.gz')
         files.sort()
         nfiles = len(files)
         if nfiles==0:
@@ -33,16 +33,10 @@ def load(files=None):
     for f in files:
         iso.append(Table.read(f))
     if len(iso)==1: iso=iso[0]
-        
-    # Change metallicity and age names for parsec
-    if 'AGE' not in iso.colnames and 'LOGAGE' in iso.colnames:
-        iso['AGE'] = 10**iso['LOGAGE'].copy()
-    if 'METAL' not in iso.colnames and 'MH' in iso.colnames:
-        iso['METAL'] = iso['MH']
-        
+    
     # Index
     grid = IsoGrid(iso)
-
+    
     return grid
 
 def isointerp2(iso1,iso2,frac,photnames=None,minlabel=1,maxlabel=7,verbose=False):
