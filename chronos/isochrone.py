@@ -402,12 +402,11 @@ def smoothsynth(iso1,iso2,totmass,photnames=None,verbose=False):
         nlab2 = len(lab2)
 
         # Number of stars for this label
-        pdf_label = iso1['pdf'][lab1]
-        nstars_label = int(np.sum(pdf_label)*totmass)
+        nstars_label = int(np.sum(pdf1[lab1])*totmass)
         frac = np.random.rand(nstars_label)
             
         # Get scaled indexes
-        pdf_label = pdf1[lab1]  #iso1['pdf'][lab1]
+        pdf_label = pdf1[lab1]
         pdf_label = np.hstack((0.0, pdf_label))
         pindx = np.arange(len(pdf_label)).astype(float)/len(pdf_label)
         cdf_label = np.cumsum(pdf_label)
