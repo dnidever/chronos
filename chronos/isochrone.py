@@ -338,6 +338,106 @@ def isointerp(grid,age,metal,names=None,minlabel=1,maxlabel=7,verbose=False):
     return iso
 
 
+def isopdf(data):
+    # PDF, probability distribution function
+    # int_IMF, which is the integral of the IMF under consideration (as selected in the form, in number of stars,
+    # and normalised to a total mass of 1 Msun) from 0 up to the current M_ini. Differences between 2 values of
+    # int_IMF give the absolute number of stars occupying that isochrone section per unit mass of stellar
+    # population initially born, as expected for the selected IMF.
+    ndata = len(data)
+    pdf = np.maximum(np.diff(data['INT_IMF'].data),0.0)   # 1e-8
+    pdf = np.hstack((0.0, pdf))
+    # Create normalized index array (from 0-1)
+    indx = np.arange(ndata).astype(float)/(ndata-1)
+    # Create cumulative distribution function
+    cdf = np.cumsum(pdf)
+    cdf /= np.max(cdf)
+    return pdf,cdf
+    
+def smoothsynth(iso1,iso2,totmass,photnames=None,verbose=False):
+    """ Create synthetic stellar population that smoothly covers
+        between two isochrones """
+
+    minlabel = np.min(np.concatenate((iso1['LABEL'],iso2['LABEL'])))
+    maxlabel = np.max(np.concatenate((iso1['LABEL'],iso2['LABEL'])))
+    
+    age1 = iso1['AGE'][0]
+    metal1 = iso1['METAL'][0]
+    age2 = iso2['AGE'][0]
+    metal2 = iso2['METAL'][0]
+    dt = iso1.data.dtype
+
+    # Total mass input, figure out the number of stars we expect
+    # for our stellar mass range
+    nstars = np.ceil((np.max(iso1['INT_IMF'])-np.min(iso1['INT_IMF']))*totmass)
+
+    if photnames is None:
+        colnames = np.char.array(iso1.colnames)
+        photind, = np.where((colnames.find('MAG')>-1) & (colnames.find('_')>-1))
+        photnames = list(colnames[photind])
+    interpnames = ['AGE','METAL','MINI','INT_IMF','MASS','LOGTE','LOGG']+photnames
+
+    # Label loop
+    pdf1,cdf1 = isopdf(iso1)
+    outlist = []
+    for l in range(minlabel,maxlabel+1):
+        lab1 ,= np.where(iso1['LABEL']==l)
+        nlab1 = len(lab1)
+        lab2, = np.where(iso2['LABEL']==l)
+        nlab2 = len(lab2)
+        # both must have this label
+        if nlab1==0 or nlab2==0:
+            continue
+        if verbose:
+            print('Label=%d, N1=%d, N2=%d' % (l,nlab1,nlab2))
+
+        # Only one point, get next or previous point
+        if l==maxlabel:
+            lab1 = np.hstack((lab1[0]-1,lab1))
+            lab2 = np.hstack((lab2[0]-1,lab2))
+        else:
+            lab1 = np.hstack((lab1[0],lab1,lab1[-1]))
+            lab2 = np.hstack((lab2[0],lab2,lab2[-1]))
+        nlab1 = len(lab1)
+        nlab2 = len(lab2)
+
+        # Number of stars for this label
+        pdf_label = iso1['pdf'][lab1]
+        nstars_label = int(np.sum(pdf_label)*totmass)
+        frac = np.random.rand(nstars_label)
+            
+        # Get scaled indexes
+        pdf_label = pdf1[lab1]  #iso1['pdf'][lab1]
+        pdf_label = np.hstack((0.0, pdf_label))
+        pindx = np.arange(len(pdf_label)).astype(float)/len(pdf_label)
+        cdf_label = np.cumsum(pdf_label)
+        cdf_label /= np.max(cdf_label)
+        rnd = np.random.rand(nstars_label)
+        newindx = interp1d(cdf_label,pindx)(rnd)
+
+        # Normalized indices for iso1 and iso2
+        indx1 = np.arange(nlab1).astype(float)/(nlab1-1)
+        indx2 = np.arange(nlab2).astype(float)/(nlab2-1)
+            
+        out1 = np.zeros(nstars_label,dtype=dt)
+        for n in interpnames:
+            kind = 'quadratic'
+            if nlab1<3 or nlab2<3: kind='linear'
+            data1 = interp1d(indx1,iso1[n][lab1],kind=kind)(newindx)
+            data2 = interp1d(indx2,iso2[n][lab2],kind=kind)(newindx)             
+            # use linear interpolation to the value at FRAC
+            data = data1*(1-frac)+data2*frac
+            out1[n] = data
+        out1['LABEL'] = l
+        outlist.append(out1)
+
+    # Stack all of the label tables
+    out = np.hstack(outlist)
+    out = Table(out)
+
+    return out
+
+
 # Maybe make separate Iso class for the single isochrones
 
 class Isochrone:
@@ -487,7 +587,7 @@ class Isochrone:
         if bands is None:
             bands = self.bands
 
-        # By default us 1000 stars
+        # By default use 1000 stars
         if nstars is None and totmass is None:
             nstars = 1000
 
