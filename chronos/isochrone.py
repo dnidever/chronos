@@ -391,15 +391,19 @@ def smoothsynth(iso1,iso2,totmass,photnames=None,verbose=False):
         if verbose:
             print('Label=%d, N1=%d, N2=%d' % (l,nlab1,nlab2))
 
-        # Only one point, get next or previous point
-        if l==maxlabel:
+        # Add next point so there are no gaps between labels
+        if l<maxlabel:
+            lab1 = np.hstack((lab1,lab1[-1]+1))
+            lab2 = np.hstack((lab2,lab2[-1]+1))
+            nlab1 = len(lab1)
+            nlab2 = len(lab2)
+            
+        # Only one point, get previous point
+        if nlab1==1 and l==maxlabel:
             lab1 = np.hstack((lab1[0]-1,lab1))
             lab2 = np.hstack((lab2[0]-1,lab2))
-        else:
-            lab1 = np.hstack((lab1[0],lab1,lab1[-1]))
-            lab2 = np.hstack((lab2[0],lab2,lab2[-1]))
-        nlab1 = len(lab1)
-        nlab2 = len(lab2)
+            nlab1 = len(lab1)
+            nlab2 = len(lab2)
 
         # Number of stars for this label
         nstars_label = int(np.sum(pdf1[lab1])*totmass)
