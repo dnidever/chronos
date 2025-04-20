@@ -113,7 +113,7 @@ def isointerp2(iso1,iso2,frac,photnames=None,minlabel=1,maxlabel=7,verbose=False
         colnames = np.char.array(iso1.colnames)
         photind, = np.where((colnames.find('MAG')>-1) & (colnames.find('_')>-1))
         photnames = list(colnames[photind])
-    interpnames = ['INT_IMF','MASS','LOGTE','LOGG']+photnames
+    interpnames = ['INT_IMF','MASS','LOGTE','LOGL','LOGG']+photnames
 
     # Initialize the output catalog
     nout = int(1.5*np.max([niso1,niso2]))
@@ -124,6 +124,7 @@ def isointerp2(iso1,iso2,frac,photnames=None,minlabel=1,maxlabel=7,verbose=False
     out['INT_IMF'] = 0.0
     out['MASS'] = 0.0
     out['LOGTE'] = 0.0
+    out['LOGL'] = 0.0
     out['LOGG'] = 0.0            
     out['LABEL'] = -1
     for n in photnames:
@@ -354,7 +355,7 @@ def isopdf(data):
     cdf /= np.max(cdf)
     return pdf,cdf
     
-def smoothsynth(iso1,iso2,totmass,photnames=None,verbose=False):
+def smoothsynth2(iso1,iso2,totmass,photnames=None,verbose=False):
     """ Create synthetic stellar population that smoothly covers
         between two isochrones """
 
@@ -375,7 +376,7 @@ def smoothsynth(iso1,iso2,totmass,photnames=None,verbose=False):
         colnames = np.char.array(iso1.colnames)
         photind, = np.where((colnames.find('MAG')>-1) & (colnames.find('_')>-1))
         photnames = list(colnames[photind])
-    interpnames = ['AGE','METAL','MINI','INT_IMF','MASS','LOGTE','LOGG']+photnames
+    interpnames = ['AGE','METAL','MINI','INT_IMF','MASS','LOGTE','LOGL','LOGG']+photnames
 
     # Label loop
     pdf1,cdf1 = isopdf(iso1)
@@ -438,6 +439,175 @@ def smoothsynth(iso1,iso2,totmass,photnames=None,verbose=False):
     out = np.hstack(outlist)
     out = Table(out)
 
+    return out
+
+
+    
+def smoothsynth(isolist,totmass,photnames=None,verbose=False):
+    """ Create synthetic stellar population that smoothly covers
+        between two or 4 isochrones """
+    # the ordering in the list is not important
+
+    niso = len(isolist)
+    if niso != 2 and niso != 4:
+        raise ValueError('isolist must have 2 or 4 isochrones')
+
+    minlabel = np.min(np.concatenate([s['LABEL'] for s in isolist]))
+    # use lowest of the maximum labels across the isochrones
+    maxlabel = np.min([np.max(s['LABEL']) for s in isolist])
+
+    ages = [s['AGE'][0] for s in isolist]
+    metals = [s['METAL'][0] for s in isolist]
+    uages = np.unique(np.round(ages,5))
+    umetals = np.unique(np.round(metals,5))
+    lage = np.min(uages)  # low value
+    hage = np.max(uages)  # high value
+    dage = hage-lage
+    if dage <= 0: dage=1
+    lmetal = np.min(umetals)
+    hmetal = np.max(umetals)
+    dmetal = hmetal-lmetal
+    if dmetal <= 0: dmetal = 1
+    # age/metal index, 0 or 1 depending if it is on the lower or upper end
+    ageindex = [int(np.round((a-lage)/dage)) for a in ages]
+    metalindex = [int(np.round((m-lmetal)/dmetal)) for m in metals]
+    
+    if niso==2:
+        if len(uages) != 2 and len(umetals) != 2:
+            raise ValueError('Two isochrones input.  Need either two different ages and/or two differental metals')
+    else:
+        if len(uages) != 2 or len(umetals) != 2:
+            print(uages)
+            print(umetals)
+            raise ValueError('Four isochrones input.  Need two different ages and two different metals')
+    
+    iso1 = isolist[0]
+    iso2 = isolist[1]
+    if niso==4:
+        iso3 = isolist[2]
+        iso4 = isolist[3]
+    dt = iso1.data.dtype
+
+    # Total mass input, figure out the number of stars we expect
+    # for our stellar mass range
+    nstars = np.ceil((np.max(iso1['INT_IMF'])-np.min(iso1['INT_IMF']))*totmass)
+
+    if photnames is None:
+        colnames = np.char.array(iso1.colnames)
+        photind, = np.where((colnames.find('MAG')>-1) & (colnames.find('_')>-1))
+        photnames = list(colnames[photind])
+    interpnames = ['AGE','METAL','MINI','INT_IMF','MASS','LOGTE','LOGL','LOGG']+photnames
+
+    # Label loop
+    pdf1,cdf1 = isopdf(iso1)
+    outlist = []
+    for l in range(minlabel,maxlabel+1):
+        lab1 ,= np.where(iso1['LABEL']==l)
+        nlab1 = len(lab1)
+        lab2, = np.where(iso2['LABEL']==l)
+        nlab2 = len(lab2)
+        nlab = np.array([nlab1,nlab2])
+        if niso==4:
+            lab3 ,= np.where(iso3['LABEL']==l)
+            nlab3 = len(lab3)
+            lab4, = np.where(iso4['LABEL']==l)
+            nlab4 = len(lab4)
+            nlab = np.array([nlab1,nlab2,nlab3,nlab4])
+            
+        # all must have this label
+        if np.min(nlab)==0:
+            continue
+        if verbose:
+            if niso==2:
+                print('Label={:d}, N1={:d}, N2={:d}'.format(l,nlab1,nlab2))
+            else:
+                print('Label={:d}, N1={:d}, N2={:d}, N3={:d}, N4={:d}'.format(l,nlab1,nlab2,nlab3,nlab4))
+
+        # Add next point so there are no gaps between labels
+        if l<maxlabel:
+            lab1 = np.hstack((lab1,lab1[-1]+1))
+            lab2 = np.hstack((lab2,lab2[-1]+1))
+            nlab1 = len(lab1)
+            nlab2 = len(lab2)
+            if niso==4:
+                lab3 = np.hstack((lab3,lab3[-1]+1))
+                lab4 = np.hstack((lab4,lab4[-1]+1))
+                nlab3 = len(lab3)
+                nlab4 = len(lab4)
+            
+        # Only one point, get previous point
+        if nlab1==1 and l==maxlabel:
+            lab1 = np.hstack((lab1[0]-1,lab1))
+            lab2 = np.hstack((lab2[0]-1,lab2))
+            nlab1 = len(lab1)
+            nlab2 = len(lab2)
+            if niso==4:
+                lab3 = np.hstack((lab3[0]-1,lab3))
+                lab4 = np.hstack((lab4[0]-1,lab4))
+                nlab3 = len(lab3)
+                nlab4 = len(lab4)
+
+        # Number of stars for this label
+        try:
+            nstars_label = int(np.sum(pdf1[lab1])*totmass)
+        except:
+            print('smoothsynth error')
+            import pdb; pdb.set_trace()
+            
+        # Get scaled indexes
+        pdf_label = pdf1[lab1]
+        pdf_label = np.hstack((0.0, pdf_label))
+        pindx = np.arange(len(pdf_label)).astype(float)/len(pdf_label)
+        cdf_label = np.cumsum(pdf_label)
+        cdf_label /= np.max(cdf_label)
+        rnd = np.random.rand(nstars_label)
+        newindx = interp1d(cdf_label,pindx)(rnd)
+
+        # Normalized indices for iso1 and iso2
+        indx1 = np.arange(nlab1).astype(float)/(nlab1-1)
+        indx2 = np.arange(nlab2).astype(float)/(nlab2-1)
+        if niso==4:
+            indx3 = np.arange(nlab3).astype(float)/(nlab3-1)
+            indx4 = np.arange(nlab4).astype(float)/(nlab4-1)
+
+        # Weights
+        if niso==2:
+            frac = np.random.rand(nstars_label)
+        else:
+            afrac = np.random.rand(nstars_label)
+            mfrac = np.random.rand(nstars_label)
+            # create weights dictionaries
+            awt = {0:afrac,1:(1-afrac)}
+            mwt = {0:mfrac,1:(1-mfrac)}
+            # if it's on the lower side then it gets frac,
+            #  if on the upper side (1-frac)
+            w1 = awt[ageindex[0]] * mwt[metalindex[0]]
+            w2 = awt[ageindex[1]] * mwt[metalindex[1]]
+            w3 = awt[ageindex[2]] * mwt[metalindex[2]]
+            w4 = awt[ageindex[3]] * mwt[metalindex[3]]
+            # total weights are already 1
+            
+        out1 = np.zeros(nstars_label,dtype=dt)
+        for n in interpnames:
+            kind = 'quadratic'
+            if np.min(nlab)<3: kind='linear'
+            data1 = interp1d(indx1,iso1[n][lab1],kind=kind)(newindx)
+            data2 = interp1d(indx2,iso2[n][lab2],kind=kind)(newindx)
+            # use linear interpolation to the value at FRAC
+            if niso==2:
+                data = data1*(1-frac)+data2*frac
+            else:
+                data3 = interp1d(indx3,iso3[n][lab3],kind=kind)(newindx)
+                data4 = interp1d(indx4,iso4[n][lab4],kind=kind)(newindx)
+                data = w1*data1 + w2*data2 + w3*data3 + w4*data4
+            out1[n] = data
+        out1['LABEL'] = l
+        outlist.append(out1)
+
+    # Stack all of the label tables
+    out = np.hstack(outlist)
+    out = Table(out)
+    
     return out
 
 
@@ -584,7 +754,7 @@ class Isochrone:
         return self._bands
 
     def synth(self,nstars=None,totmass=None,minlabel=1,maxlabel=8,bands=None,minmass=0,
-              maxmass=1000,columns=['AGE','METAL','MINI','MASS','LOGTE','LOGG','LABEL']):
+              maxmass=1000,columns=['AGE','METAL','MINI','MASS','LOGTE','LOGL','LOGG','LABEL']):
         """ Create synthetic population."""
     
         if bands is None:
@@ -809,7 +979,7 @@ class IsoGrid:
             names = list(np.array(self.bands)[nameind])
         if names is None:
             names = self.bands
-        outnames = ['AGE','METAL','MINI','INT_IMF','MASS','LOGTE','LOGG','LABEL']+names
+        outnames = ['AGE','METAL','MINI','INT_IMF','MASS','LOGTE','LOGL','LOGG','LABEL']+names
         
         
         # Get the closest isochrone on the grid
