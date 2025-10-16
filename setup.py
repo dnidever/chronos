@@ -6,7 +6,7 @@ from setuptools import setup, find_packages
 pypiname = 'thechronos'
 
 setup(name="thechronos",
-      version='1.0.16',
+      version='1.0.17',
       description='Automatic isochrone fitting to photometric data',
       author='David Nidever',
       author_email='dnidever@montana.edu',
